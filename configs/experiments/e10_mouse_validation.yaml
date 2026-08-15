@@ -1,0 +1,4 @@
+name: e10_mouse_validation
+mode: pathway_conservation
+direct_zero_shot_prediction: false
+

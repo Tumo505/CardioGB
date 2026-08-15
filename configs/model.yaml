@@ -1,0 +1,20 @@
+device: auto
+dtype: float32
+states: [I, A, F, C, V, M]
+graph:
+  type: knn
+  k: 8
+  symmetric: true
+  edge_features: [distance, delta_x, delta_y]
+gnn:
+  architecture: message_passing_mlp
+  layers: 2
+  hidden_dim: 64
+  dropout: 0.1
+ode:
+  solver: rk4
+  step_size: 0.05
+constraints:
+  state_min: 0.0
+  state_max: 1.0
+

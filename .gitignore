@@ -1,0 +1,24 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Large and generated artifacts
+data/raw/**
+data/external/**
+data/interim/**
+data/processed/**
+results/**
+figures/**
+*.crdownload
+
+# Keep documentation/metadata files inside ignored trees
+!data/README.md
+!data/manifest.yaml
+!results/README.md
+!figures/README.md
+

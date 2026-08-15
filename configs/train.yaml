@@ -1,0 +1,17 @@
+seed: 20260815
+device: auto
+epochs: 200
+learning_rate: 0.001
+weight_decay: 0.00001
+early_stopping_patience: 25
+mixed_precision: false
+ensemble_size: 5
+batching:
+  unit: section
+  max_nodes: 12000
+loss:
+  lambda_distribution: 1.0
+  lambda_spatial: 0.001
+  lambda_biology: 0.01
+  lambda_residual: 0.001
+

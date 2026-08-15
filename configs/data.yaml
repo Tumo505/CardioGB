@@ -1,0 +1,38 @@
+project_root: ..
+datasets:
+  zebrafish:
+    spatial_rds: data/raw/zebrafish/regeneration/observed/Stereo-seq-regeneration.rds
+    spatial_metadata: data/raw/zebrafish/regeneration/observed/Stereo-seq-regeneration.meta.txt
+    scrna_rds: data/raw/zebrafish/regeneration/observed/scRNA-seq-regeneration.rds
+    scrna_metadata: data/raw/zebrafish/regeneration/observed/scRNA-seq-regeneration.meta.txt
+    author_scripts: data/raw/zebrafish/author_code/scripts.tar
+    optional_imputed_rds: data/raw/zebrafish/regeneration/optional/Stereo-seq-regeneration-impute.rds
+    optional_3d_h5ad: data/raw/zebrafish/regeneration/optional/Stereo-seq-3D-impute.h5ad
+    stages:
+      uninjured: 0.0
+      6 hpa: 0.25
+      12 hpa: 0.5
+      1 dpa: 1.0
+      3 dpa: 3.0
+      7 dpa: 7.0
+      14 dpa: 14.0
+      28 dpa: 28.0
+    metadata:
+      row_id_column: record_id
+      section_column: orig.ident
+      isolate_column: isolate
+      biological_unit_column: cid
+      stage_column: time_points
+      annotation_column: annotation
+      coordinate_columns: [x, y]
+  mouse_spatial:
+    directory: data/external/mouse/gse188888_spatial
+    archive_pattern: GSM*.tar.gz
+  mouse_scrna:
+    archive: data/external/mouse/gse153480_scrna/GSE153480_RAW.tar
+  human_mi:
+    visium_directory: data/external/human_mi/zenodo_6578047/visium
+    visium_pattern: Visium_*.h5ad
+    snrna: data/external/human_mi/zenodo_6578047/snrna/snRNA-seq-submission.h5ad
+    snatac: data/external/human_mi/zenodo_6578047/snatac/snATAC-seq-submission.h5ad
+

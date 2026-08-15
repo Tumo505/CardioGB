@@ -1,0 +1,3 @@
+name: e8_ablations
+ablations: [mechanism, graph, shuffled_graph, residual_penalty, state_definition]
+

@@ -1,0 +1,30 @@
+version: provisional_v0
+status: provisional
+scoring:
+  method: mean_scaled
+  output_scaling: minmax
+  min_genes: 2
+states:
+  I: inflammation
+  A: activation
+  F: fibroblast_ecm
+  C: cardiomyocyte_regeneration
+  V: vascularisation
+  M: mature_myocardium
+pathways:
+  inflammation:
+    genes: [il1b, tnfa, cxcl8a, mpx, lcp1, spi1b]
+  activation:
+    genes: [nppa, fn1a, aldh1a2, wt1b, raldh2, postnb]
+  fibroblast_ecm:
+    genes: [col1a1a, col1a2, col3a1a, fn1a, postnb, dcn]
+  cardiomyocyte_regeneration:
+    genes: [pcna, mki67, ccna2, ccnb1, gata4, hand2]
+  vascularisation:
+    genes: [kdrl, kdr, fli1a, etv2, pecam1, vwf]
+  mature_myocardium:
+    genes: [myl7, tnnt2a, myh6, myh7, actc1b, ttn.1]
+notes:
+  - These starter genes are implementation placeholders, not a frozen biological definition.
+  - Final sets require atlas-marker review, ontology sources, orthology mapping, and sensitivity analysis.
+

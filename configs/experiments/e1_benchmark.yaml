@@ -1,0 +1,5 @@
+name: e1_benchmark
+models: [persistence, mechanistic_ode, neural_ode, graph_neural_ode, cardiogb]
+split: grouped_biological_unit
+metrics: [mmd, mean_error, covariance_error]
+

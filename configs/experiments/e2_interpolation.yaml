@@ -1,0 +1,4 @@
+name: e2_interpolation
+protocol: leave_intermediate_stage_out
+held_out_stages: [0.5, 3.0, 14.0]
+

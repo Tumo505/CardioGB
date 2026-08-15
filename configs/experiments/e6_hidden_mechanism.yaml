@@ -1,0 +1,4 @@
+name: e6_hidden_mechanism
+system: synthetic_hidden_mechanism
+omit_interaction: true
+

@@ -1,0 +1,26 @@
+schema_version: 1
+datasets:
+  zebrafish_regeneration:
+    role: primary
+    source: zenodo:14991776
+    observed_dir: data/raw/zebrafish/regeneration/observed
+    optional_dir: data/raw/zebrafish/regeneration/optional
+    author_code: data/raw/zebrafish/author_code/scripts.tar
+    primary_expression: observed
+  neonatal_mouse_spatial:
+    role: external_validation
+    source: geo:GSE188888
+    path: data/external/mouse/gse188888_spatial
+    stages_days: [3, 7, 14, 21]
+  neonatal_mouse_scrna:
+    role: external_interpretation
+    source: geo:GSE153480
+    path: data/external/mouse/gse153480_scrna/GSE153480_RAW.tar
+  human_mi:
+    role: optional_external_validation
+    source: zenodo:6578047
+    visium_dir: data/external/human_mi/zenodo_6578047/visium
+    snrna: data/external/human_mi/zenodo_6578047/snrna/snRNA-seq-submission.h5ad
+    snatac: data/external/human_mi/zenodo_6578047/snatac/snATAC-seq-submission.h5ad
+    hca_export: data/external/human_mi/hca_export/Kuppe-et-al
+    status_note: snRNA and Visium are present; snATAC is absent and optional for the core study
