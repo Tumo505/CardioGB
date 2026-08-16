@@ -1,9 +1,9 @@
-version: provisional_v0
-status: provisional
+version: atlas_curated_v1
+status: frozen_for_core_pilot_v1
 scoring:
   method: mean_scaled
-  output_scaling: minmax
-  min_genes: 2
+  output_scaling: robust_minmax
+  min_genes: 8
 states:
   I: inflammation
   A: activation
@@ -13,18 +13,36 @@ states:
   M: mature_myocardium
 pathways:
   inflammation:
-    genes: [il1b, tnfa, cxcl8a, mpx, lcp1, spi1b]
+    description: Injury-associated innate immune and inflammatory activity.
+    genes: [tnfa, il1b, cxcl8a, marco, grnas, mpeg1.1, lsp1b, cd74a, cd9b, grn1, grn2, mpx, lyz, fcer1gl, c1qa, c1qb, c1qc]
+    expected_peak: early, approximately 12 hpa to 1 dpa
   activation:
-    genes: [nppa, fn1a, aldh1a2, wt1b, raldh2, postnb]
+    description: Early endocardial, epicardial, and organ-wide injury activation.
+    genes: [aldh1a2, cd151, ackr3b, inhbaa, sema3aa, tnfrsf11b, hspb6, hspb11, cd63, hif1ab, tcf21, wt1b]
+    expected_peak: approximately 6 hpa to 1 dpa, with epicardial activation near 3 dpa
   fibroblast_ecm:
-    genes: [col1a1a, col1a2, col3a1a, fn1a, postnb, dcn]
+    description: Pro-regenerative fibroblast and extracellular-matrix remodelling.
+    genes: [col12a1a, col12a1b, lum, fn1b, fn1a, col1a1a, col1a2, mfap5, dcn, mmp2, fibinb, postnb]
+    expected_peak: approximately 3 to 7 dpa
   cardiomyocyte_regeneration:
-    genes: [pcna, mki67, ccna2, ccnb1, gata4, hand2]
+    description: Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.
+    genes: [pcna, cdk1, ccng1, ccng2, mustn1b, hand2, nkx2.5, acta1b, ccn1, spry4, csrp3, tpm4a, mef2cb, cacybp, desma, tbx20, nppa, nppb]
+    expected_peak: dedifferentiation from 12 hpa and proliferation near 7 dpa
   vascularisation:
-    genes: [kdrl, kdr, fli1a, etv2, pecam1, vwf]
+    description: Endothelial, coronary revascularisation, and vascular scaffold activity.
+    genes: [kdrl, kdr, flt1, pecam1, cdh5, fli1a, etv2, plvapa, plvapb, vwf, cxcl12b, tagln]
+    expected_peak: increasing during tissue replacement and late vascular restoration
   mature_myocardium:
-    genes: [myl7, tnnt2a, myh6, myh7, actc1b, ttn.1]
+    description: Contractile myocardium, oxidative metabolism, and calcium handling.
+    genes: [myl7, myh7, myh6, tnnt2a, tnni4a, cmlc1, ttn.1, ttn.2, actc1b, tcap, tnnc1b, atp2a2a, slc8a1a, ryr2b, cox6a2, cox5b2, cox4i1l]
+    expected_peak: uninjured myocardium and re-differentiation near 14 to 28 dpa
+sources:
+  atlas_article: https://www.nature.com/articles/s41467-025-59070-0
+  atlas_pubmed: https://pubmed.ncbi.nlm.nih.gov/40253397/
+  author_marker_script: data/interim/author_scripts/scripts/01. scRNA clustering/02.sc_regeneration.r
 notes:
-  - These starter genes are implementation placeholders, not a frozen biological definition.
-  - Final sets require atlas-marker review, ontology sources, orthology mapping, and sensitivity analysis.
-
+  - Version 1 is anchored to genes and processes explicitly described in the primary atlas and its supplied marker script.
+  - All listed genes were verified present in the observed 29,539-gene Spatial counts layer.
+  - State scores are programme summaries, not estimates of cell abundance or causal activity.
+  - Stage/domain QC and mean-scaled, rank-based, and module-score sensitivity comparisons are recorded in results/tables.
+  - atlas_curated_v1 is frozen for core pilot experiments; cross-species use still requires the versioned orthology table and species-specific expression QC.

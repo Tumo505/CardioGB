@@ -12,9 +12,17 @@ def main() -> None:
     parser.add_argument("--assay", default="Spatial")
     parser.add_argument("--bundle", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--rscript", type=Path)
+    parser.add_argument("--skip-export", action="store_true")
     args = parser.parse_args()
-    completed = run_seurat_export(args.rds, args.bundle, assay=args.assay)
-    print(completed.stdout)
+    if not args.skip_export:
+        completed = run_seurat_export(
+            args.rds,
+            args.bundle,
+            assay=args.assay,
+            rscript=None if args.rscript is None else str(args.rscript),
+        )
+        print(completed.stdout)
     print("H5AD shape:", mtx_bundle_to_h5ad(args.bundle, args.output))
 
 

@@ -29,13 +29,22 @@ python scripts\inspect_data.py --config configs\data.yaml
 python scripts\check_environment.py
 ```
 
-After installing R plus Seurat, the primary execution sequence is:
+The project-local R/Seurat environment is reproducible from
+`environment-r.yml`. The current workspace uses `.r-env` (R 4.4.3 and Seurat
+5.5.1); run R through `conda run` so its native libraries are on `PATH`:
 
 ```powershell
-python scripts\preprocess_zebrafish.py --rds data\raw\zebrafish\regeneration\observed\Stereo-seq-regeneration.rds --bundle data\interim\zebrafish_counts --output data\interim\zebrafish_observed.h5ad
+conda env create --prefix .\.r-env --file environment-r.yml
+conda run --prefix .\.r-env Rscript scripts\inspect_seurat.R data\raw\zebrafish\regeneration\observed\Stereo-seq-regeneration.rds
+python scripts\preprocess_zebrafish.py --rds data\raw\zebrafish\regeneration\observed\Stereo-seq-regeneration.rds --bundle data\interim\zebrafish_counts --output data\interim\zebrafish_observed.h5ad --rscript .\.r-env\Scripts\Rscript.exe
 python scripts\score_pathways.py --input data\interim\zebrafish_observed.h5ad --output data\processed\zebrafish_states.npz
 python scripts\build_graphs.py --input data\interim\zebrafish_observed.h5ad --output data\processed\graphs.npz --k 4 6 8 12 16 --qc-output results\tables\graph_qc.csv
-python scripts\run_benchmark.py --data data\processed\zebrafish_states.npz
+python scripts\pathway_sensitivity.py --input data\interim\zebrafish_observed.h5ad
+python scripts\run_benchmark.py --data data\processed\zebrafish_states.npz --output-dir results\real_e1
 ```
+
+The preprocessed observed-count H5AD and state/graph files already exist in this
+workspace; pass `--skip-export` to preprocessing when repeating only Python-side
+conversion.
 
 Large source datasets are intentionally excluded from version control.

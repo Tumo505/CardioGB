@@ -17,11 +17,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the leakage-safe five-model benchmark")
     parser.add_argument("--data", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, default=Path("results"))
+    parser.add_argument("--epochs", type=int)
+    parser.add_argument("--seed", type=int, default=20260815)
     args = parser.parse_args()
     dataset = StateDataset.load(args.data)
     metadata = pd.DataFrame({"group": dataset.groups, "stage": dataset.times.astype(str)})
     _, _, test_mask, definition = grouped_split(
-        metadata, group_column="group", stage_column="stage", seed=20260815
+        metadata, group_column="group", stage_column="stage", seed=args.seed
     )
     definition.save(args.output_dir / "tables" / "split.json")
     persistence_rows = []
@@ -40,8 +42,14 @@ def main() -> None:
     )
     reports = {"persistence": {"test_transitions": len(persistence_rows)}}
     for name in ("mechanistic_ode", "neural_ode", "graph_neural_ode", "cardiogb"):
-        reports[name] = train_model(args.data, name, args.output_dir)
-    print(json.dumps(reports, indent=2))
+        reports[name] = train_model(
+            args.data,
+            name,
+            args.output_dir,
+            epochs_override=args.epochs,
+            seed_override=args.seed,
+        )
+    print(json.dumps({"seed": args.seed, "reports": reports}, indent=2))
 
 
 if __name__ == "__main__":

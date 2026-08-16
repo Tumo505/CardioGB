@@ -1,0 +1,32 @@
+version: atlas_curated_v1_mouse_translation_v1
+status: frozen_for_external_validation_v1
+mapping_policy:
+  - Translate zebrafish programmes to canonical mouse orthologs and mammalian functional counterparts.
+  - Collapse duplicated zebrafish paralogs to one mouse gene.
+  - Omit ambiguous mappings rather than inflating a pathway with weak homologs.
+  - Use the Ensembl table for provenance but correct biologically implausible automated mappings.
+states:
+  I: inflammation
+  A: activation
+  F: fibroblast_ecm
+  C: cardiomyocyte_regeneration
+  V: vascularisation
+  M: mature_myocardium
+pathways:
+  inflammation:
+    genes: [Tnf, Il1b, Marco, Grn, Mpeg1, Lsp1, Cd74, Cd9, Mpo, Lyz2, Fcer1g, C1qa, C1qb, C1qc]
+    notes: Cxcl8 has no direct murine ortholog; zebrafish granulin paralogs collapse to Grn.
+  activation:
+    genes: [Aldh1a2, Cd151, Ackr3, Inhba, Sema3a, Tnfrsf11b, Hspb6, Hspb11, Cd63, Hif1a, Tcf21, Wt1]
+  fibroblast_ecm:
+    genes: [Col12a1, Lum, Fn1, Col1a1, Col1a2, Mfap5, Dcn, Mmp2, Fibin, Postn]
+  cardiomyocyte_regeneration:
+    genes: [Pcna, Cdk1, Ccng1, Ccng2, Mustn1, Hand2, Nkx2-5, Acta1, Ccn1, Spry4, Csrp3, Tpm4, Mef2c, Cacybp, Des, Tbx20, Nppa, Nppb]
+  vascularisation:
+    genes: [Kdr, Flt1, Pecam1, Cdh5, Fli1, Etv2, Plvap, Vwf, Cxcl12, Tagln]
+  mature_myocardium:
+    genes: [Myl7, Myh7, Myh6, Tnnt2, Tnni3, Ttn, Actc1, Tcap, Tnnc1, Atp2a2, Slc8a1, Ryr2, Cox6a2, Cox5b, Cox4i1]
+notes:
+  - Atp2a2a is translated to Atp2a2 (SERCA2), not the automated low-identity Atp1a4 BioMart hit.
+  - Mpx is represented by the mammalian neutrophil counterpart Mpo, not Epx.
+  - Lyz is represented by the myeloid marker Lyz2, not Lyzl1.

@@ -1,4 +1,6 @@
 .venv/
+.r-env/
+.codex_spreadsheet/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -21,4 +23,3 @@ figures/**
 !data/manifest.yaml
 !results/README.md
 !figures/README.md
-

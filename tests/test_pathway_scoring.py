@@ -18,3 +18,18 @@ def test_sparse_pathway_scoring_and_gene_diagnostics() -> None:
     assert result.matched_genes["state"] == ("GeneA", "GeneC")
     assert result.missing_genes["state"] == ("missing",)
 
+
+def test_rank_and_module_score_variants_are_bounded() -> None:
+    expression = sparse.csr_matrix(np.arange(60, dtype=float).reshape(10, 6))
+    for method in ("rank_mean", "module_score"):
+        result = score_pathways(
+            expression,
+            [f"g{i}" for i in range(6)],
+            {"state": ["g0", "g1"]},
+            method=method,
+            output_scaling="robust_minmax",
+            min_genes=2,
+            module_bins=2,
+        )
+        assert np.isfinite(result.values).all()
+        assert result.values.min() >= 0 and result.values.max() <= 1

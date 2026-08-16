@@ -35,4 +35,10 @@ datasets:
     visium_pattern: Visium_*.h5ad
     snrna: data/external/human_mi/zenodo_6578047/snrna/snRNA-seq-submission.h5ad
     snatac: data/external/human_mi/zenodo_6578047/snatac/snATAC-seq-submission.h5ad
-
+processed:
+  zebrafish_observed_h5ad: data/interim/zebrafish_observed.h5ad
+  zebrafish_states: data/processed/zebrafish_states.npz
+  zebrafish_primary_graph: data/processed/zebrafish_graph_k8.npz
+  orthology: data/processed/orthology.csv
+  zebrafish_rank_states: data/processed/zebrafish_states_rank_mean.npz
+  mouse_visium_states: data/processed/mouse_visium_states.npz

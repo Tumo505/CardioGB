@@ -73,27 +73,56 @@ def evaluate_transitions(
     device: str,
     step_size: float = 0.05,
     solver: str = "rk4",
+    max_steps_per_transition: int | None = 16,
 ) -> list[dict[str, Any]]:
-    """Evaluate unmatched future-state distributions and, when available, MI."""
+    """Evaluate unmatched distributions, aggregating bounded source patches."""
     model = model.to(device).eval()
-    rows = []
+    grouped: dict[str, dict[str, Any]] = {}
     for transition in transitions:
         graph = transition.graph.to(device) if hasattr(transition.graph, "to") else transition.graph
         source = transition.source_states.to(device)
+        effective_step_size = step_size
+        if max_steps_per_transition is not None:
+            effective_step_size = max(
+                step_size, abs(transition.t1 - transition.t0) / max_steps_per_transition
+            )
         prediction = integrate_model(
-            model, source, graph, transition.t0, transition.t1,
-            step_size=step_size, method=solver,
+            model,
+            source,
+            graph,
+            transition.t0,
+            transition.t1,
+            step_size=effective_step_size,
+            method=solver,
         )
-        row: dict[str, Any] = {
-            "transition": transition.name,
-            "t0": transition.t0,
-            "t1": transition.t1,
-            **distribution_metrics(prediction.cpu().numpy(), transition.target_states.numpy()),
-        }
+        key = transition.evaluation_group or transition.name
+        entry = grouped.setdefault(
+            key,
+            {
+                "t0": transition.t0,
+                "t1": transition.t1,
+                "predictions": [],
+                "target": transition.target_states.numpy(),
+                "mi": [],
+            },
+        )
+        entry["predictions"].append(prediction.cpu().numpy())
         if hasattr(model, "vector_field"):
             terms = model.vector_field(transition.t1, prediction, graph)
             if "mechanistic" in terms and "residual" in terms:
                 mi = mechanistic_insufficiency(terms["mechanistic"], terms["residual"])
-                row.update(mi_mean=float(mi.mean()), mi_median=float(mi.median()))
+                entry["mi"].append(mi.cpu().numpy())
+    rows = []
+    for name, entry in grouped.items():
+        prediction = np.concatenate(entry["predictions"], axis=0)
+        row: dict[str, Any] = {
+            "transition": name,
+            "t0": entry["t0"],
+            "t1": entry["t1"],
+            **distribution_metrics(prediction, entry["target"]),
+        }
+        if entry["mi"]:
+            mi = np.concatenate(entry["mi"])
+            row.update(mi_mean=float(mi.mean()), mi_median=float(np.median(mi)))
         rows.append(row)
     return rows

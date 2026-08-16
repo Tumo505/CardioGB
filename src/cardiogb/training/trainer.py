@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from pathlib import Path
+import time
 from typing import Any, Iterable
 
 import torch
@@ -24,6 +25,7 @@ class CrossSectionalTransition:
     t0: float
     t1: float
     name: str = "transition"
+    evaluation_group: str | None = None
 
 
 @dataclass(frozen=True)
@@ -36,7 +38,11 @@ class TrainerConfig:
     gradient_clip: float | None = 5.0
     early_stopping_patience: int = 25
     max_distribution_samples: int = 2048
+    max_ode_steps_per_transition: int | None = 16
     mixed_precision: bool = False
+    patches_per_transition_per_epoch: int | None = 2
+    thermal_cooldown_every_epochs: int | None = None
+    thermal_cooldown_seconds: float = 0.0
 
 
 class CrossSectionalTrainer:
@@ -70,6 +76,7 @@ class CrossSectionalTrainer:
             transition.t0,
             transition.t1,
             transition.name,
+            transition.evaluation_group,
         )
 
     def _subsample(self, values: Tensor) -> Tensor:
@@ -83,13 +90,17 @@ class CrossSectionalTrainer:
         self, transition: CrossSectionalTransition
     ) -> tuple[Tensor, dict[str, Tensor]]:
         batch = self._move_transition(transition)
+        step_size = self.config.step_size
+        if self.config.max_ode_steps_per_transition is not None:
+            interval = abs(batch.t1 - batch.t0)
+            step_size = max(step_size, interval / self.config.max_ode_steps_per_transition)
         prediction = integrate_model(
             self.model,
             batch.source_states,
             batch.graph,
             batch.t0,
             batch.t1,
-            step_size=self.config.step_size,
+            step_size=step_size,
             method=self.config.solver,
         )
         residual = None
@@ -105,8 +116,31 @@ class CrossSectionalTrainer:
             weights=self.loss_weights,
         )
 
+    def _select_transition_patches(
+        self, transitions: Iterable[CrossSectionalTransition], training: bool
+    ) -> list[CrossSectionalTransition]:
+        items = list(transitions)
+        limit = self.config.patches_per_transition_per_epoch
+        if limit is None:
+            return items
+        grouped: dict[str, list[CrossSectionalTransition]] = {}
+        for item in items:
+            grouped.setdefault(item.evaluation_group or item.name, []).append(item)
+        selected = []
+        for patches in grouped.values():
+            if len(patches) <= limit:
+                selected.extend(patches)
+            elif training:
+                order = torch.randperm(len(patches))[:limit].tolist()
+                selected.extend(patches[index] for index in order)
+            else:
+                order = torch.linspace(0, len(patches) - 1, steps=limit).round().long().tolist()
+                selected.extend(patches[index] for index in order)
+        return selected
+
     def _epoch(self, transitions: Iterable[CrossSectionalTransition], training: bool) -> float:
         self.model.train(training)
+        transitions = self._select_transition_patches(transitions, training)
         losses: list[float] = []
         context = torch.enable_grad() if training else torch.no_grad()
         with context:
@@ -153,6 +187,16 @@ class CrossSectionalTrainer:
                     self.save_checkpoint(checkpoint_path, epoch, validation_loss)
             if stopper.update(validation_loss):
                 break
+            cooldown_interval = self.config.thermal_cooldown_every_epochs
+            if (
+                self.device.type == "cuda"
+                and cooldown_interval is not None
+                and cooldown_interval > 0
+                and self.config.thermal_cooldown_seconds > 0
+                and (epoch + 1) % cooldown_interval == 0
+            ):
+                torch.cuda.empty_cache()
+                time.sleep(self.config.thermal_cooldown_seconds)
         self.model.load_state_dict(best_state)
         return self.history
 
