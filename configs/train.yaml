@@ -8,7 +8,7 @@ mixed_precision: false
 cuda_memory_fraction: 0.65
 cooldown_seconds: 20
 thermal_cooldown_every_epochs: 5
-thermal_cooldown_seconds: 45
+thermal_cooldown_seconds: 15
 ensemble_size: 5
 max_distribution_samples: 512
 max_ode_steps_per_transition: 16
