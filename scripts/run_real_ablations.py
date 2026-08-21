@@ -189,23 +189,25 @@ def main() -> None:
         data_path = args.rank_data if variant == "state_definition" else args.data
         for seed in args.seeds:
             run_dir = args.output_dir / variant / f"seed_{seed}"
-            if not (run_dir / "done.json").is_file():
+            trained_this_iteration = not (run_dir / "done.json").is_file()
+            if trained_this_iteration:
                 run_variant(data_path, variant, seed, args.epochs, run_dir)
                 newly_trained += 1
             manifest["completed"].append({"ablation": variant, "seed": seed})
             atomic_json(manifest, args.output_dir / "run_manifest.json")
-            aggregate(args.output_dir, args.reference_dir, args.seeds)
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            if cooldown:
-                time.sleep(cooldown)
-            if args.max_new_models and newly_trained >= args.max_new_models:
-                manifest["status"] = "partial"
-                manifest["new_models_this_batch"] = newly_trained
-                atomic_json(manifest, args.output_dir / "run_manifest.json")
-                print(json.dumps(manifest, indent=2))
-                return
+            if trained_this_iteration:
+                aggregate(args.output_dir, args.reference_dir, args.seeds)
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                if cooldown:
+                    time.sleep(cooldown)
+                if args.max_new_models and newly_trained >= args.max_new_models:
+                    manifest["status"] = "partial"
+                    manifest["new_models_this_batch"] = newly_trained
+                    atomic_json(manifest, args.output_dir / "run_manifest.json")
+                    print(json.dumps(manifest, indent=2))
+                    return
     manifest["status"] = "complete"
     atomic_json(manifest, args.output_dir / "run_manifest.json")
     aggregate(args.output_dir, args.reference_dir, args.seeds)

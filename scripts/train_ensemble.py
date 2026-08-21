@@ -87,6 +87,11 @@ def main() -> None:
     history_rows = []
     member_seeds = []
     newly_trained = 0
+    all_members_ready = all(
+        (args.output_dir / "checkpoints" / f"member_{member:02d}.pt").is_file()
+        and (args.output_dir / "members" / f"member_{member:02d}.json").is_file()
+        for member in range(args.members)
+    )
     for member in range(args.members):
         member_seed = seed + member
         member_seeds.append(member_seed)
@@ -96,9 +101,11 @@ def main() -> None:
         seed_everything(member_seed)
         model = build_model("cardiogb", model_config, mech_config)
         if marker.is_file() and checkpoint.is_file():
-            payload = torch.load(checkpoint, map_location=device, weights_only=False)
-            model.load_state_dict(payload["model"])
-            model.to(device)
+            if all_members_ready:
+                payload = torch.load(checkpoint, map_location=device, weights_only=False)
+                model.load_state_dict(payload["model"])
+                model.to(device)
+                models.append(model)
             if history_path.is_file():
                 history_rows.extend(pd.read_csv(history_path).to_dict("records"))
         else:
@@ -122,24 +129,24 @@ def main() -> None:
                 },
                 marker,
             )
-        models.append(model)
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        if cooldown:
-            time.sleep(cooldown)
-        if (
-            args.max_new_members
-            and newly_trained >= args.max_new_members
-            and member + 1 < args.members
-        ):
+            models.append(model)
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            if cooldown:
+                time.sleep(cooldown)
+        if args.max_new_members and newly_trained >= args.max_new_members:
             export_table(pd.DataFrame(history_rows), args.output_dir / "metrics" / "history.csv")
+            members_completed = sum(
+                (args.output_dir / "members" / f"member_{index:02d}.json").is_file()
+                for index in range(args.members)
+            )
             atomic_json(
                 {
                     "status": "partial",
                     "device": device,
                     "members_requested": args.members,
-                    "members_completed": member + 1,
+                    "members_completed": members_completed,
                     "base_seed": seed,
                     "epochs_requested": args.epochs,
                     "batch_max_nodes": max_nodes,
@@ -150,7 +157,7 @@ def main() -> None:
                 },
                 args.output_dir / "run_manifest.json",
             )
-            print(json.dumps({"status": "partial", "members_completed": member + 1}))
+            print(json.dumps({"status": "partial", "members_completed": members_completed}))
             return
     export_table(pd.DataFrame(history_rows), args.output_dir / "metrics" / "history.csv")
     grouped = {}

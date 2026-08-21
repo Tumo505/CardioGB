@@ -49,3 +49,52 @@ def distribution_mean_calibration(
         "observed_mean": target.tolist(),
         "covered": covered.tolist(),
     }
+
+def conformal_scale(
+    ensemble_predictions: np.ndarray,
+    observed: np.ndarray,
+    *,
+    confidence: float = 0.95,
+    epsilon: float = 1e-6,
+) -> dict[str, object]:
+    """Fit a finite-sample multiplicative conformal scale on state means."""
+    predictions, observed = np.asarray(ensemble_predictions), np.asarray(observed)
+    if predictions.ndim != 3 or observed.ndim != 2:
+        raise ValueError("expected [members, nodes, states] and [nodes, states]")
+    if not 0.0 < confidence < 1.0:
+        raise ValueError("confidence must be between zero and one")
+    member_means = predictions.mean(axis=1)
+    center = member_means.mean(axis=0)
+    spread = member_means.std(axis=0, ddof=0)
+    target = observed.mean(axis=0)
+    scores = np.abs(target - center) / np.maximum(spread, epsilon)
+    level = min(1.0, np.ceil((len(scores) + 1) * confidence) / len(scores))
+    scale = float(np.quantile(scores, level, method="higher"))
+    return {"scale": scale, "confidence": confidence, "scores": scores.tolist()}
+
+
+def calibrated_mean_coverage(
+    ensemble_predictions: np.ndarray,
+    observed: np.ndarray,
+    scale: float,
+    *,
+    epsilon: float = 1e-6,
+) -> dict[str, object]:
+    """Evaluate calibrated ensemble intervals on unmatched state means."""
+    predictions, observed = np.asarray(ensemble_predictions), np.asarray(observed)
+    if predictions.ndim != 3 or observed.ndim != 2:
+        raise ValueError("expected [members, nodes, states] and [nodes, states]")
+    member_means = predictions.mean(axis=1)
+    mean = member_means.mean(axis=0)
+    std = member_means.std(axis=0, ddof=0)
+    target = observed.mean(axis=0)
+    radius = scale * np.maximum(std, epsilon)
+    covered = (target >= mean - radius) & (target <= mean + radius)
+    return {
+        "coverage": float(covered.mean()),
+        "mean": mean.tolist(),
+        "std": std.tolist(),
+        "radius": radius.tolist(),
+        "observed_mean": target.tolist(),
+        "covered": covered.tolist(),
+    }

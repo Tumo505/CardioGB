@@ -4,8 +4,8 @@ epochs: 200
 learning_rate: 0.001
 weight_decay: 0.00001
 early_stopping_patience: 25
-mixed_precision: false
-cuda_memory_fraction: 0.65
+mixed_precision: true
+cuda_memory_fraction: 0.78
 cooldown_seconds: 20
 thermal_cooldown_every_epochs: 5
 thermal_cooldown_seconds: 15
@@ -14,8 +14,8 @@ max_distribution_samples: 512
 max_ode_steps_per_transition: 16
 batching:
   unit: section
-  max_nodes: 4000
-  patches_per_transition_per_epoch: 2
+  max_nodes: 6000
+  patches_per_transition_per_epoch: 3
 loss:
   lambda_distribution: 1.0
   lambda_spatial: 0.001

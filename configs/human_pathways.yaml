@@ -1,0 +1,23 @@
+version: atlas_curated_v1_human_translation_v1
+status: frozen_for_optional_human_translation_v1
+mapping_policy:
+  - Translate zebrafish programmes to canonical human orthologs and mammalian functional counterparts.
+  - Collapse duplicated zebrafish paralogs to one human gene.
+  - Correct implausible automated BioMart substitutions using canonical cardiac and immune counterparts.
+pathways:
+  inflammation:
+    genes: [TNF, IL1B, CXCL8, MARCO, GRN, MPEG1, LSP1, CD74, CD9, MPO, LYZ, FCER1G, C1QA, C1QB, C1QC]
+  activation:
+    genes: [ALDH1A2, CD151, ACKR3, INHBA, SEMA3A, TNFRSF11B, HSPB6, HSPB11, CD63, HIF1A, TCF21, WT1]
+  fibroblast_ecm:
+    genes: [COL12A1, LUM, FN1, COL1A1, COL1A2, MFAP5, DCN, MMP2, FIBIN, POSTN]
+  cardiomyocyte_regeneration:
+    genes: [PCNA, CDK1, CCNG1, CCNG2, MUSTN1, HAND2, NKX2-5, ACTA1, CCN1, SPRY4, CSRP3, TPM4, MEF2C, CACYBP, DES, TBX20, NPPA, NPPB]
+  vascularisation:
+    genes: [KDR, FLT1, PECAM1, CDH5, FLI1, ETV2, PLVAP, VWF, CXCL12, TAGLN]
+  mature_myocardium:
+    genes: [MYL7, MYH7, MYH6, TNNT2, TNNI3, TTN, ACTC1, TCAP, TNNC1, ATP2A2, SLC8A1, RYR2, COX6A2, COX5B, COX4I1]
+notes:
+  - ATP2A2 represents SERCA2; ATP1A4 is explicitly excluded.
+  - MPO and LYZ are used for canonical human myeloid biology; EPX and LYZL paralogs are excluded.
+  - Scores from snATAC are regulatory-feature summaries, not RNA expression scores.

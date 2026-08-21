@@ -23,4 +23,4 @@ datasets:
     snrna: data/external/human_mi/zenodo_6578047/snrna/snRNA-seq-submission.h5ad
     snatac: data/external/human_mi/zenodo_6578047/snatac/snATAC-seq-submission.h5ad
     hca_export: data/external/human_mi/hca_export/Kuppe-et-al
-    status_note: snRNA and Visium are present; snATAC is absent and optional for the core study
+    status_note: snRNA, Visium, and full snATAC H5AD are present; human translation remains optional for the core study

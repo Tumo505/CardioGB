@@ -73,6 +73,9 @@ class EdgeMessagePassing(nn.Module):
         messages = self.message_network(
             torch.cat((states[target], states[source], edge_attr), dim=-1)
         )
+        # Scatter accumulation stays in the state dtype for numerical stability
+        # and because index_add_ requires matching dtypes under CUDA autocast.
+        messages = messages.to(dtype=states.dtype)
         aggregate = torch.zeros(
             states.shape[0], messages.shape[-1], dtype=states.dtype, device=states.device
         )

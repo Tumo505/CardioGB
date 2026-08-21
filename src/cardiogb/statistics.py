@@ -56,3 +56,19 @@ def paired_group_permutation_test(
     null = (signs * difference).mean(axis=1)
     p_value = (np.count_nonzero(np.abs(null) >= abs(observed)) + 1) / (n_permutations + 1)
     return {"mean_difference": observed, "p_value": float(p_value)}
+
+def benjamini_hochberg(p_values: np.ndarray) -> np.ndarray:
+    """Control false-discovery rate while preserving the input order."""
+    values = np.asarray(p_values, dtype=float)
+    if values.ndim != 1 or np.any((values < 0) | (values > 1)):
+        raise ValueError("p-values must be a one-dimensional array in [0, 1]")
+    if len(values) == 0:
+        return values.copy()
+    order = np.argsort(values)
+    ranked = values[order]
+    adjusted = np.minimum.accumulate(
+        (ranked * len(values) / np.arange(1, len(values) + 1))[::-1]
+    )[::-1]
+    output = np.empty_like(adjusted)
+    output[order] = np.minimum(adjusted, 1.0)
+    return output
