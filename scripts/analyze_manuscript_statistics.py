@@ -35,9 +35,13 @@ def paired_model_tests(frame, label_column, reference, unit_column, family):
             difference = paired[reference].to_numpy() - paired[label].to_numpy()
             estimate, lower, upper = bootstrap_difference(difference)
             test = paired_group_permutation_test(paired[reference].to_numpy(), paired[label].to_numpy(), seed=20260815)
+            standard_deviation = difference.std(ddof=1)
             rows.append({
                 "family": family, "metric": metric, "reference": reference, "comparator": label,
                 "mean_difference_reference_minus_comparator": estimate,
+                "median_difference_reference_minus_comparator": float(np.median(difference)),
+                "paired_standardized_effect_dz": float(estimate / standard_deviation) if standard_deviation > 0 else np.nan,
+                "reference_win_fraction_lower_error": float(np.mean(difference < 0)),
                 "ci_lower": lower, "ci_upper": upper, "p_value": test["p_value"],
                 "n_units": len(paired), "unit": unit_column,
             })
@@ -88,21 +92,21 @@ def main():
     args = parser.parse_args()
     root = args.results_root
     outputs, missing = {}, []
-    benchmark_path = root / "real_batched_multiseed" / "tables" / "benchmark_metrics.csv"
+    benchmark_path = root / "final_full_multiseed" / "tables" / "benchmark_metrics.csv"
     if benchmark_path.is_file():
         result = paired_model_tests(pd.read_csv(benchmark_path), "model", "cardiogb", "seed", "E1 model comparisons")
         export_table(result, args.output_dir / "e1_paired_tests.csv")
         outputs["e1_tests"] = len(result)
     else:
         missing.append(str(benchmark_path))
-    ablation_path = root / "real_batched_ablations" / "tables" / "ablation_metrics.csv"
+    ablation_path = root / "final_full_ablations" / "tables" / "ablation_metrics.csv"
     if ablation_path.is_file():
         result = paired_model_tests(pd.read_csv(ablation_path), "ablation", "full", "seed", "E8 ablations")
         export_table(result, args.output_dir / "e8_paired_tests.csv")
         outputs["e8_tests"] = len(result)
     else:
         missing.append(str(ablation_path))
-    for protocol, directory in (("E2", "e2_interpolation_full"), ("E3", "e3_extrapolation_full")):
+    for protocol, directory in (("E2", "e2_interpolation_revised"), ("E3", "e3_extrapolation_revised")):
         path = root / directory / "tables" / "all_metrics.csv"
         result = protocol_ci(path, protocol)
         if len(result):
@@ -117,7 +121,7 @@ def main():
         outputs["e4_intervals"] = len(result)
     else:
         missing.append(str(e4_path))
-    external_path = root / "external_predictive_validation" / "metrics" / "external_prediction.csv"
+    external_path = root / "external_predictive_validation_revised" / "metrics" / "external_prediction.csv"
     if external_path.is_file():
         external = pd.read_csv(external_path)
         mouse = external[external["protocol"].str.startswith("mouse")].copy()

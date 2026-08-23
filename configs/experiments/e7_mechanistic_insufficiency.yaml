@@ -1,3 +1,6 @@
 name: e7_mechanistic_insufficiency
-aggregate_by: [time_points, annotation, orig.ident]
-
+aggregate_by: [biological_unit, stage_days, domain, section]
+ensemble_scope: all_completed_cardiogb_seeds
+integrated_gradients_steps: 8
+outputs: [mechanistic_insufficiency, residual_attribution, parameter_stability, parameter_pair_correlations, effective_rank, condition_number]
+claim_scope: hypothesis_generating_noncausal

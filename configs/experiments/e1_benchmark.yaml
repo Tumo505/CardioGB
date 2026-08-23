@@ -1,5 +1,8 @@
 name: e1_benchmark
 models: [persistence, mechanistic_ode, neural_ode, graph_neural_ode, cardiogb]
 split: grouped_biological_unit
-metrics: [mmd, mean_error, covariance_error]
-
+seeds: [20260825, 20260826, 20260827, 20260828, 20260829, 20260830, 20260831, 20260832, 20260833, 20260834]
+epochs: 200
+metrics: [mmd, moment_error, sliced_wasserstein]
+paired_inference_unit: initialization_seed_with_matched_split
+development_validation_seeds_excluded_from_final_test: [20260815, 20260816]

@@ -63,6 +63,7 @@ def train_model(
             max_distribution_samples=int(train_config["max_distribution_samples"]),
             max_ode_steps_per_transition=int(train_config["max_ode_steps_per_transition"]),
             mixed_precision=bool(train_config["mixed_precision"]),
+            amp_dtype=str(train_config.get("amp_dtype", "bfloat16")),
             patches_per_transition_per_epoch=int(
                 train_config["batching"]["patches_per_transition_per_epoch"]
             ),
@@ -70,9 +71,18 @@ def train_model(
                 train_config["thermal_cooldown_every_epochs"]
             ),
             thermal_cooldown_seconds=float(train_config["thermal_cooldown_seconds"]),
+        patch_batch_size=int(train_config["batching"]["patch_batch_size"]),
+        force_float32_integration=bool(train_config["force_float32_integration"]),
+        mechanistic_learning_rate_scale=float(
+            train_config["mechanistic_learning_rate_scale"]
+        ),
+        warm_start_epochs=int(train_config.get("warm_start_epochs", 0)),
+        gradient_checkpointing=bool(train_config.get("gradient_checkpointing", True)),
         ),
         loss_weights=LossWeights(
             distribution=float(train_config["loss"]["lambda_distribution"]),
+        moments=float(train_config["loss"]["lambda_moments"]),
+        wasserstein=float(train_config["loss"]["lambda_wasserstein"]),
             spatial=float(train_config["loss"]["lambda_spatial"]),
             biology=float(train_config["loss"]["lambda_biology"]),
             residual=float(train_config["loss"]["lambda_residual"]),
@@ -109,6 +119,15 @@ def train_model(
             {"model": model_name, "parameter": name, "value": float(value.detach().cpu())}
             for name, value in parameters.items()
         ]
+        if hasattr(trainer.model, "mechanistic_gate"):
+            parameter_rows.extend(
+                {"model": model_name, "parameter": f"mechanistic_gate_{state}", "value": float(value)}
+                for state, value in zip(dataset.state_names, trainer.model.mechanistic_gate().detach().cpu())
+            )
+            parameter_rows.extend(
+                {"model": model_name, "parameter": f"residual_scale_{state}", "value": float(value)}
+                for state, value in zip(dataset.state_names, trainer.model.residual_scale().detach().cpu())
+            )
         export_table(
             pd.DataFrame(parameter_rows), output_dir / "tables" / f"{model_name}_parameters.csv"
         )

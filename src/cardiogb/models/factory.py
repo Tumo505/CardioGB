@@ -36,8 +36,17 @@ def build_model(
     if name == "graph_neural_ode":
         return GraphNeuralODEFunc(edge_dim=3, **common)
     if name == "cardiogb":
+        constraints = model_config.get("constraints", {})
+        residual = model_config.get("residual", {})
+        gate = model_config.get("mechanistic_gate", {})
         return CardioGB(
             MechanisticODE.from_config(mechanistic_config),
             GraphNeuralODEFunc(edge_dim=3, **common),
+            state_min=float(constraints.get("state_min", 0.0)),
+            state_max=float(constraints.get("state_max", 1.0)),
+            residual_scale_max=float(residual.get("scale_max", 0.25)),
+            residual_scale_initial=float(residual.get("scale_initial", 0.05)),
+            mechanistic_gate_min=float(gate.get("minimum", 0.05)),
+            mechanistic_gate_initial=float(gate.get("initial", 0.5)),
         )
     raise ValueError(f"Unknown model: {name}")

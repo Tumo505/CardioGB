@@ -47,12 +47,22 @@ def trainer_for(seed: int, epochs: int):
             max_distribution_samples=int(train_config["max_distribution_samples"]),
             max_ode_steps_per_transition=int(train_config["max_ode_steps_per_transition"]),
             mixed_precision=bool(train_config["mixed_precision"]),
+            amp_dtype=str(train_config.get("amp_dtype", "bfloat16")),
             patches_per_transition_per_epoch=int(train_config["batching"]["patches_per_transition_per_epoch"]),
             thermal_cooldown_every_epochs=int(train_config["thermal_cooldown_every_epochs"]),
             thermal_cooldown_seconds=float(train_config["thermal_cooldown_seconds"]),
+        patch_batch_size=int(train_config["batching"]["patch_batch_size"]),
+        force_float32_integration=bool(train_config["force_float32_integration"]),
+        mechanistic_learning_rate_scale=float(
+            train_config["mechanistic_learning_rate_scale"]
+        ),
+        warm_start_epochs=int(train_config.get("warm_start_epochs", 0)),
+        gradient_checkpointing=bool(train_config.get("gradient_checkpointing", True)),
         ),
         loss_weights=LossWeights(
             distribution=float(train_config["loss"]["lambda_distribution"]),
+        moments=float(train_config["loss"]["lambda_moments"]),
+        wasserstein=float(train_config["loss"]["lambda_wasserstein"]),
             spatial=float(train_config["loss"]["lambda_spatial"]),
             biology=float(train_config["loss"]["lambda_biology"]),
             residual=float(train_config["loss"]["lambda_residual"]),
@@ -154,10 +164,19 @@ def run_one(dataset, data_path: Path, protocol: str, case, seed: int, epochs: in
         row.update(protocol=protocol, case=float(case), seed=seed, horizon_days=float(row["t1"] - row["t0"]))
     export_table(pd.DataFrame(metrics), output / "metrics" / "test.csv")
     parameters = trainer.model.mechanistic_model.constrained_parameters()
-    export_table(
-        pd.DataFrame([{"parameter": name, "value": float(value.detach().cpu()), "seed": seed, "case": case} for name, value in parameters.items()]),
-        output / "tables" / "parameters.csv",
+    parameter_rows = [
+        {"parameter": name, "value": float(value.detach().cpu()), "seed": seed, "case": case}
+        for name, value in parameters.items()
+    ]
+    parameter_rows.extend(
+        {"parameter": f"mechanistic_gate_{state}", "value": float(value), "seed": seed, "case": case}
+        for state, value in zip(dataset.state_names, trainer.model.mechanistic_gate().detach().cpu())
     )
+    parameter_rows.extend(
+        {"parameter": f"residual_scale_{state}", "value": float(value), "seed": seed, "case": case}
+        for state, value in zip(dataset.state_names, trainer.model.residual_scale().detach().cpu())
+    )
+    export_table(pd.DataFrame(parameter_rows), output / "tables" / "parameters.csv")
     atomic_json(
         {
             "status": "complete", "protocol": protocol, "case": case, "seed": seed,

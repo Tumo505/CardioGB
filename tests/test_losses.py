@@ -24,4 +24,11 @@ def test_composite_objective_accepts_unmatched_counts() -> None:
         weights=LossWeights(1.0, 0.1, 0.1, 0.1, 0.1),
     )
     loss.backward()
-    assert set(parts) == {"distribution", "moments", "biology", "spatial", "residual"}
+    assert set(parts) == {
+        "distribution",
+        "moments",
+        "wasserstein",
+        "biology",
+        "spatial",
+        "residual",
+    }

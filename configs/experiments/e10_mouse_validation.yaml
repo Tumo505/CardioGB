@@ -1,4 +1,6 @@
 name: e10_mouse_validation
-mode: pathway_conservation
-direct_zero_shot_prediction: false
-
+conservation_mode: pathway_conservation
+direct_zero_shot_prediction: true
+direct_prediction_scope: exploratory_frozen_zebrafish_to_mouse_without_retraining
+reference: persistence
+inference: descriptive_single_sample_per_stage

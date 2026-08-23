@@ -1,3 +1,7 @@
 name: e4_group_cv
-group_columns: [isolate, cid, orig.ident]
-
+group_definition: registered_C1_C2_C3_biological_replicate_within_stage
+folds: [1, 2, 3]
+seeds: [20260825, 20260826, 20260827, 20260828, 20260829]
+epochs: 200
+early_stopping_patience: 25
+inference_unit: held_out_biological_replicate_fold

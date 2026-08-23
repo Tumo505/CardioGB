@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -13,7 +14,7 @@ from torch import Tensor, nn
 
 from cardiogb.losses.objective import LossWeights, cardiogb_objective
 from cardiogb.models.message_passing import TorchGraph
-from cardiogb.ode.integration import integrate_model
+from cardiogb.ode.integration import integrate_model_with_residual_energy
 from cardiogb.training.callbacks import EarlyStopping
 
 
@@ -40,9 +41,16 @@ class TrainerConfig:
     max_distribution_samples: int = 2048
     max_ode_steps_per_transition: int | None = 16
     mixed_precision: bool = False
+    amp_dtype: str = "bfloat16"
     patches_per_transition_per_epoch: int | None = 2
     thermal_cooldown_every_epochs: int | None = None
     thermal_cooldown_seconds: float = 0.0
+    patch_batch_size: int = 1
+    force_float32_integration: bool = True
+    mechanistic_learning_rate_scale: float = 0.25
+    gradient_checkpointing: bool = True
+    gradient_checkpoint_interval: int = 3
+    warm_start_epochs: int = 0
 
 
 class CrossSectionalTrainer:
@@ -60,11 +68,32 @@ class CrossSectionalTrainer:
         self.model = model.to(self.device)
         self.config = config
         self.loss_weights = loss_weights
+        if hasattr(model, "mechanistic_model") and hasattr(model, "residual_model"):
+            mechanistic_parameters = list(model.mechanistic_model.parameters())
+            mechanistic_ids = {id(parameter) for parameter in mechanistic_parameters}
+            residual_parameters = [
+                parameter for parameter in model.parameters() if id(parameter) not in mechanistic_ids
+            ]
+            parameter_groups = [
+                {
+                    "params": mechanistic_parameters,
+                    "lr": config.learning_rate * config.mechanistic_learning_rate_scale,
+                },
+                {"params": residual_parameters, "lr": config.learning_rate},
+            ]
+        else:
+            parameter_groups = model.parameters()
         self.optimizer = torch.optim.AdamW(
-            model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay
+            parameter_groups, lr=config.learning_rate, weight_decay=config.weight_decay
         )
         self.amp_enabled = config.mixed_precision and self.device.type == "cuda"
-        self.scaler = torch.amp.GradScaler("cuda", enabled=self.amp_enabled)
+        amp_dtypes = {"float16": torch.float16, "bfloat16": torch.bfloat16}
+        if config.amp_dtype not in amp_dtypes:
+            raise ValueError(f"unsupported AMP dtype: {config.amp_dtype}")
+        self.amp_dtype = amp_dtypes[config.amp_dtype]
+        self.scaler = torch.amp.GradScaler(
+            "cuda", enabled=self.amp_enabled and self.amp_dtype == torch.float16
+        )
         self.history: list[dict[str, float]] = []
 
     def _move_transition(self, transition: CrossSectionalTransition) -> CrossSectionalTransition:
@@ -94,23 +123,41 @@ class CrossSectionalTrainer:
         if self.config.max_ode_steps_per_transition is not None:
             interval = abs(batch.t1 - batch.t0)
             step_size = max(step_size, interval / self.config.max_ode_steps_per_transition)
-        prediction = integrate_model(
-            self.model,
-            batch.source_states,
-            batch.graph,
-            batch.t0,
-            batch.t1,
-            step_size=step_size,
-            method=self.config.solver,
+        stable_float32 = (
+            self.config.force_float32_integration
+            and self.device.type == "cuda"
+            and hasattr(self.model, "project_state")
         )
-        residual = None
-        if hasattr(self.model, "vector_field"):
-            residual = self.model.vector_field(batch.t1, prediction, batch.graph).get("residual")
+        context = (
+            torch.autocast(device_type="cuda", enabled=False)
+            if stable_float32
+            else nullcontext()
+        )
+        with context:
+            source_states = batch.source_states.float() if stable_float32 else batch.source_states
+            prediction, trajectory_residual_energy = integrate_model_with_residual_energy(
+                self.model,
+                source_states,
+                batch.graph,
+                batch.t0,
+                batch.t1,
+                step_size=step_size,
+                method=self.config.solver,
+                checkpoint_steps=(
+                    self.config.gradient_checkpoint_interval
+                    if self.config.gradient_checkpointing and self.model.training
+                    else False
+                ),
+            )
+            residual = None
+            if hasattr(self.model, "vector_field"):
+                residual = self.model.vector_field(batch.t1, prediction, batch.graph).get("residual")
         return cardiogb_objective(
             prediction,
             batch.target_states,
             graph=batch.graph,
             residual=residual,
+            residual_energy=trajectory_residual_energy,
             distribution_predicted=self._subsample(prediction),
             distribution_observed=self._subsample(batch.target_states),
             weights=self.loss_weights,
@@ -138,9 +185,59 @@ class CrossSectionalTrainer:
                 selected.extend(patches[index] for index in order)
         return selected
 
+    @staticmethod
+    def _combine_transition_patches(
+        patches: list[CrossSectionalTransition],
+    ) -> CrossSectionalTransition:
+        if len(patches) == 1:
+            return patches[0]
+        first = patches[0]
+        if any((item.t0, item.t1) != (first.t0, first.t1) for item in patches):
+            raise ValueError("batched transition patches must share t0 and t1")
+        source_states = torch.cat([item.source_states for item in patches], dim=0)
+        edge_indices = []
+        edge_attributes = []
+        offset = 0
+        for item in patches:
+            if item.graph is None:
+                offset += len(item.source_states)
+                continue
+            edge_indices.append(item.graph.edge_index + offset)
+            edge_attributes.append(item.graph.edge_attr)
+            offset += len(item.source_states)
+        graph = None
+        if edge_indices:
+            graph = TorchGraph(torch.cat(edge_indices, dim=1), torch.cat(edge_attributes, dim=0))
+        return CrossSectionalTransition(
+            source_states=source_states,
+            target_states=first.target_states,
+            graph=graph,
+            t0=first.t0,
+            t1=first.t1,
+            name=f"{first.evaluation_group or first.name}__batch_{len(patches)}",
+            evaluation_group=first.evaluation_group,
+        )
+
+    def _batch_transition_patches(
+        self, transitions: list[CrossSectionalTransition]
+    ) -> list[CrossSectionalTransition]:
+        batch_size = self.config.patch_batch_size
+        if batch_size <= 1:
+            return transitions
+        grouped: dict[tuple[str, float, float], list[CrossSectionalTransition]] = {}
+        for item in transitions:
+            key = (item.evaluation_group or item.name, item.t0, item.t1)
+            grouped.setdefault(key, []).append(item)
+        batches = []
+        for patches in grouped.values():
+            for offset in range(0, len(patches), batch_size):
+                batches.append(self._combine_transition_patches(patches[offset : offset + batch_size]))
+        return batches
+
     def _epoch(self, transitions: Iterable[CrossSectionalTransition], training: bool) -> float:
         self.model.train(training)
         transitions = self._select_transition_patches(transitions, training)
+        transitions = self._batch_transition_patches(transitions)
         losses: list[float] = []
         context = torch.enable_grad() if training else torch.no_grad()
         with context:
@@ -149,7 +246,7 @@ class CrossSectionalTrainer:
                     self.optimizer.zero_grad(set_to_none=True)
                 with torch.autocast(
                     device_type=self.device.type,
-                    dtype=torch.float16,
+                    dtype=self.amp_dtype,
                     enabled=self.amp_enabled,
                 ):
                     loss, _ = self.loss_for_transition(transition)
@@ -173,13 +270,48 @@ class CrossSectionalTrainer:
         checkpoint_path: str | Path | None = None,
     ) -> list[dict[str, float]]:
         train, validation = list(train), list(validation)
+        supports_warm_start = (
+            hasattr(self.model, "mechanistic_model")
+            and hasattr(self.model, "residual_model")
+            and hasattr(self.model, "residual_enabled")
+        )
+        if supports_warm_start and self.config.warm_start_epochs > 0:
+            self.model.residual_enabled = False
+            for parameter in self.model.residual_model.parameters():
+                parameter.requires_grad_(False)
+            self.model.raw_residual_scale.requires_grad_(False)
+            if hasattr(self.model, "raw_mechanistic_gate"):
+                self.model.raw_mechanistic_gate.requires_grad_(False)
+            for epoch in range(self.config.warm_start_epochs):
+                train_loss = self._epoch(train, True)
+                validation_loss = self._epoch(validation, False)
+                self.history.append(
+                    {
+                        "epoch": float(epoch - self.config.warm_start_epochs),
+                        "train_loss": train_loss,
+                        "validation_loss": validation_loss,
+                        "warm_start": 1.0,
+                    }
+                )
+            self.model.residual_enabled = True
+            for parameter in self.model.residual_model.parameters():
+                parameter.requires_grad_(True)
+            self.model.raw_residual_scale.requires_grad_(True)
+            if hasattr(self.model, "raw_mechanistic_gate"):
+                self.model.raw_mechanistic_gate.requires_grad_(True)
+
         stopper = EarlyStopping(self.config.early_stopping_patience)
         best_state = deepcopy(self.model.state_dict())
         for epoch in range(self.config.epochs):
             train_loss = self._epoch(train, True)
             validation_loss = self._epoch(validation, False)
             self.history.append(
-                {"epoch": float(epoch), "train_loss": train_loss, "validation_loss": validation_loss}
+                {
+                    "epoch": float(epoch),
+                    "train_loss": train_loss,
+                    "validation_loss": validation_loss,
+                    "warm_start": 0.0,
+                }
             )
             if validation_loss < stopper.best:
                 best_state = deepcopy(self.model.state_dict())

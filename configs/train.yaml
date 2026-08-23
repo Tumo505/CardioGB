@@ -1,23 +1,31 @@
 seed: 20260815
 device: auto
 epochs: 200
-learning_rate: 0.001
-weight_decay: 0.00001
+learning_rate: 0.0005
+weight_decay: 0.0001
+mechanistic_learning_rate_scale: 0.5
+warm_start_epochs: 5
 early_stopping_patience: 25
 mixed_precision: true
-cuda_memory_fraction: 0.78
-cooldown_seconds: 20
+amp_dtype: bfloat16
+cuda_memory_fraction: 0.97
+cooldown_seconds: 0
 thermal_cooldown_every_epochs: 5
-thermal_cooldown_seconds: 15
+thermal_cooldown_seconds: 0
 ensemble_size: 5
-max_distribution_samples: 512
-max_ode_steps_per_transition: 16
+max_distribution_samples: 1024
+max_ode_steps_per_transition: 96
+force_float32_integration: false
+gradient_checkpointing: true
 batching:
   unit: section
-  max_nodes: 6000
-  patches_per_transition_per_epoch: 3
+  max_nodes: 12000
+  patches_per_transition_per_epoch: 8
+  patch_batch_size: 8
 loss:
   lambda_distribution: 1.0
+  lambda_moments: 0.25
+  lambda_wasserstein: 0.25
   lambda_spatial: 0.001
-  lambda_biology: 0.01
+  lambda_biology: 0.1
   lambda_residual: 0.001

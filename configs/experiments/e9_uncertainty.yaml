@@ -1,4 +1,7 @@
 name: e9_uncertainty
 method: deep_ensemble
 ensemble_size: 5
-
+weighting: nonnegative_simplex_fit_on_zebrafish_validation_state_means
+calibration: additive_split_conformal_on_zebrafish_validation
+tests: [uncertainty_vs_error, uncertainty_vs_horizon, error_vs_horizon]
+multiplicity: benjamini_hochberg

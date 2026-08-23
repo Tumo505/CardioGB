@@ -13,6 +13,7 @@ from cardiogb.data.state_dataset import StateDataset
 from cardiogb.metrics.distributional import distribution_metrics
 from cardiogb.models.factory import build_model
 from cardiogb.ode.integration import integrate_model
+from cardiogb.training.ensemble_weighting import fit_simplex_weights
 from cardiogb.utils.config import load_yaml
 from cardiogb.utils.device import resolve_device
 from cardiogb.utils.io import atomic_json, export_table
@@ -201,9 +202,16 @@ def main() -> None:
     max_steps = int(config["max_ode_steps_per_transition"])
     ode = model_config["ode"]
 
-    validation = grouped_predictions(
-        models, zebrafish.transitions(mask=validation_mask, k=k, max_nodes=max_nodes), weights, ode, max_steps
+    validation_transitions = zebrafish.transitions(
+        mask=validation_mask, k=k, max_nodes=max_nodes
     )
+    validation = grouped_predictions(models, validation_transitions, weights, ode, max_steps)
+    design, observed = [], []
+    for item in validation.values():
+        design.append(item["members"].mean(axis=1).T)
+        observed.append(item["target"].mean(axis=0))
+    weights = fit_simplex_weights(np.concatenate(design), np.concatenate(observed))
+    validation = grouped_predictions(models, validation_transitions, weights, ode, max_steps)
     scale, additive_radius, scores, absolute_scores = conformal_factor(validation, args.confidence)
     zebra_test = grouped_predictions(
         models, zebrafish.transitions(mask=test_mask, k=k, max_nodes=max_nodes), weights, ode, max_steps
@@ -240,7 +248,8 @@ def main() -> None:
             "status": "complete",
             "device": device,
             "members": len(models),
-            "weighting": "validation-loss softmax",
+            "weighting": "nonnegative simplex weights fitted on zebrafish validation state means",
+            "ensemble_weights": weights.tolist(),
             "interval_method": "primary additive split-conformal calibration on zebrafish validation transition-state means; multiplicative diagnostic retained",
             "confidence": args.confidence,
             "conformal_scale": scale,

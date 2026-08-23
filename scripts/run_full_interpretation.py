@@ -71,6 +71,10 @@ def main():
         seed = int(checkpoint_path.parents[1].name.replace("seed_", ""))
         for name, value in model.mechanistic_model.constrained_parameters().items():
             parameter_rows.append({"member": member, "seed": seed, "parameter": name, "value": float(value.detach().cpu())})
+        for state, value in zip(dataset.state_names, model.mechanistic_gate().detach().cpu()):
+            parameter_rows.append({"member": member, "seed": seed, "parameter": f"mechanistic_gate_{state}", "value": float(value)})
+        for state, value in zip(dataset.state_names, model.residual_scale().detach().cpu()):
+            parameter_rows.append({"member": member, "seed": seed, "parameter": f"residual_scale_{state}", "value": float(value)})
         for section_number, section in enumerate(sections):
             index = np.flatnonzero(dataset.sections.astype(str) == section)
             stage = float(np.unique(dataset.times[index])[0])
@@ -134,13 +138,32 @@ def main():
         })
     export_table(pd.DataFrame(stability_rows), args.output_dir / "tables" / "parameter_stability.csv")
     matrix = parameters.pivot(index="seed", columns="parameter", values="value")
+    correlation = matrix.corr()
+    correlation_long = correlation.rename_axis("parameter_1").reset_index().melt(
+        id_vars="parameter_1", var_name="parameter_2", value_name="pearson_correlation"
+    )
+    export_table(correlation_long, args.output_dir / "tables" / "parameter_pair_correlations.csv")
     standardized = (matrix - matrix.mean()) / matrix.std(ddof=0).replace(0, 1)
     singular = np.linalg.svd(standardized.to_numpy(), compute_uv=False)
+    tolerance = singular.max() * max(standardized.shape) * np.finfo(float).eps if len(singular) else 0.0
+    positive = singular[singular > tolerance]
+    effective_rank = int(len(positive))
+    condition_number = float(positive.max() / positive.min()) if len(positive) > 1 else np.nan
+    off_diagonal = correlation.to_numpy()[~np.eye(len(correlation), dtype=bool)]
+    export_table(
+        pd.DataFrame({
+            "diagnostic": ["effective_rank", "condition_number", "maximum_absolute_pair_correlation", "parameters", "seeds"],
+            "value": [effective_rank, condition_number, float(np.nanmax(np.abs(off_diagonal))), matrix.shape[1], matrix.shape[0]],
+        }),
+        args.output_dir / "tables" / "parameter_identifiability_diagnostics.csv",
+    )
     atomic_json(
         {
             "status": "complete", "device": device, "members": len(checkpoints), "sections": len(sections),
             "spots_per_member": len(dataset.states), "ig_steps": args.ig_steps,
-            "parameter_stability_rank": int(np.linalg.matrix_rank(standardized.to_numpy())),
+            "parameter_stability_rank": effective_rank,
+            "parameter_stability_condition_number": condition_number,
+            "maximum_absolute_parameter_correlation": float(np.nanmax(np.abs(off_diagonal))),
             "parameter_stability_singular_values": singular.tolist(),
             "identifiability_scope": "real-data cross-seed stability only; ground-truth identifiability is evaluated in E5",
             "statistical_unit": "biological unit; ensemble members are averaged before pathway association tests",

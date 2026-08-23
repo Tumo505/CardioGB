@@ -1,3 +1,4 @@
 name: e8_ablations
 ablations: [mechanism, graph, shuffled_graph, residual_penalty, state_definition]
 
+seeds: [20260825, 20260826, 20260827, 20260828, 20260829]

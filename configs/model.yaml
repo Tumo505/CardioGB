@@ -13,7 +13,13 @@ gnn:
   dropout: 0.1
 ode:
   solver: rk4
-  step_size: 0.05
+  step_size: 0.25
+residual:
+  scale_max: 1.0
+  scale_initial: 0.1
+mechanistic_gate:
+  minimum: 0.05
+  initial: 0.5
 constraints:
   state_min: 0.0
   state_max: 1.0

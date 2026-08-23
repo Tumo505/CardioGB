@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+from itertools import combinations
 from pathlib import Path
 
 import anndata as ad
 import numpy as np
 import pandas as pd
 from scipy import sparse
-from scipy.stats import kruskal
+from scipy.stats import kruskal, mannwhitneyu
 
 from cardiogb.utils.config import load_yaml
 from cardiogb.utils.io import atomic_json, export_table
@@ -22,6 +23,24 @@ def bh_adjust(pvalues):
     result = np.empty_like(adjusted)
     result[order] = np.minimum(adjusted, 1.0)
     return result
+
+
+def cliffs_delta(first, second):
+    first, second = np.asarray(first, dtype=float), np.asarray(second, dtype=float)
+    differences = first[:, None] - second[None, :]
+    return float((np.count_nonzero(differences > 0) - np.count_nonzero(differences < 0)) / differences.size)
+
+
+def median_difference_ci(first, second, *, seed, n_resamples=10000):
+    first, second = np.asarray(first, dtype=float), np.asarray(second, dtype=float)
+    estimate = float(np.median(first) - np.median(second))
+    rng = np.random.default_rng(seed)
+    draws = np.empty(n_resamples, dtype=float)
+    for iteration in range(n_resamples):
+        a = rng.choice(first, size=len(first), replace=True)
+        b = rng.choice(second, size=len(second), replace=True)
+        draws[iteration] = np.median(a) - np.median(b)
+    return estimate, float(np.quantile(draws, 0.025)), float(np.quantile(draws, 0.975))
 
 
 def main():
@@ -83,14 +102,57 @@ def main():
     export_table(region, args.output_dir / "tables" / "patient_region_pathway_accessibility.csv")
     cell_type = frame.groupby(["patient", "patient_group", "cell_type_original"], observed=True)[list(scores)].mean().reset_index()
     export_table(cell_type, args.output_dir / "tables" / "patient_celltype_pathway_accessibility.csv")
-    tests = []
-    for pathway in scores:
-        groups = [part[pathway].to_numpy() for _, part in patient.groupby("patient_group", observed=True) if len(part)]
+    tests, posthoc = [], []
+    grouped_patients = {str(name): part for name, part in patient.groupby("patient_group", observed=True)}
+    for pathway_index, pathway in enumerate(scores):
+        groups = [part[pathway].to_numpy() for part in grouped_patients.values() if len(part)]
         statistic, pvalue = kruskal(*groups)
-        tests.append({"pathway": pathway, "test": "Kruskal-Wallis across patient groups", "statistic": float(statistic), "p_value": float(pvalue), "biological_unit": "patient", "n_patients": len(patient)})
+        group_count = len(groups)
+        epsilon_squared = max(0.0, float((statistic - group_count + 1) / max(len(patient) - group_count, 1)))
+        tests.append({
+            "pathway": pathway,
+            "test": "Kruskal-Wallis across patient groups",
+            "statistic": float(statistic),
+            "epsilon_squared": epsilon_squared,
+            "p_value": float(pvalue),
+            "biological_unit": "patient",
+            "n_patients": len(patient),
+        })
+        for contrast_index, (first_name, second_name) in enumerate(combinations(sorted(grouped_patients), 2)):
+            first = grouped_patients[first_name][pathway].to_numpy()
+            second = grouped_patients[second_name][pathway].to_numpy()
+            test = mannwhitneyu(first, second, alternative="two-sided", method="auto")
+            estimate, lower, upper = median_difference_ci(
+                first,
+                second,
+                seed=20260815 + pathway_index * 100 + contrast_index,
+            )
+            posthoc.append({
+                "pathway": pathway,
+                "group_1": first_name,
+                "group_2": second_name,
+                "contrast": f"{first_name} vs {second_name}",
+                "n_group_1": len(first),
+                "n_group_2": len(second),
+                "median_group_1": float(np.median(first)),
+                "median_group_2": float(np.median(second)),
+                "median_difference_group_1_minus_group_2": estimate,
+                "median_difference_ci_lower": lower,
+                "median_difference_ci_upper": upper,
+                "cliffs_delta_group_1_minus_group_2": cliffs_delta(first, second),
+                "mann_whitney_u": float(test.statistic),
+                "p_value": float(test.pvalue),
+                "biological_unit": "patient",
+            })
     test_frame = pd.DataFrame(tests)
     test_frame["p_adjust_bh"] = bh_adjust(test_frame["p_value"])
     export_table(test_frame, args.output_dir / "tables" / "patient_group_tests.csv")
+    posthoc_frame = pd.DataFrame(posthoc)
+    posthoc_frame["p_adjust_bh_global"] = bh_adjust(posthoc_frame["p_value"])
+    posthoc_frame["p_adjust_bh_within_pathway"] = posthoc_frame.groupby(
+        "pathway", observed=True
+    )["p_value"].transform(lambda values: bh_adjust(values.to_numpy()))
+    export_table(posthoc_frame, args.output_dir / "tables" / "patient_group_posthoc_effects.csv")
     categories = {}
     for column in sorted(required):
         categories[column] = {str(k): int(v) for k, v in dataset.obs[column].value_counts(dropna=False).items()}
@@ -100,6 +162,7 @@ def main():
         "matrix_mode": "backed; one union-pathway column read per cell batch",
         "pathway_source": str(args.pathways), "pathway_version": pathway_config["version"],
         "categories": categories, "inference_unit": "patient",
+        "posthoc": "pairwise Mann-Whitney tests with Cliff delta, median-difference bootstrap intervals, and BH correction",
         "limitations": [
             "X is interpreted as the submitted feature matrix; no peak-to-gene causality is inferred",
             "pathway means are regulatory-feature summaries and are not interchangeable with RNA expression scores",

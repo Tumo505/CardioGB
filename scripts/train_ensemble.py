@@ -17,6 +17,7 @@ from cardiogb.metrics.distributional import distribution_metrics
 from cardiogb.metrics.uncertainty import distribution_mean_calibration
 from cardiogb.models.factory import build_model
 from cardiogb.training.ensemble import predict_ensemble
+from cardiogb.training.ensemble_weighting import fit_simplex_weights, weighted_summary
 from cardiogb.training.trainer import CrossSectionalTrainer, TrainerConfig
 from cardiogb.utils.config import load_yaml
 from cardiogb.utils.device import resolve_device
@@ -56,6 +57,8 @@ def main() -> None:
         early_stopping_patience=int(train_config["early_stopping_patience"]),
         max_distribution_samples=int(train_config["max_distribution_samples"]),
         max_ode_steps_per_transition=int(train_config["max_ode_steps_per_transition"]),
+        mixed_precision=bool(train_config["mixed_precision"]),
+        amp_dtype=str(train_config.get("amp_dtype", "bfloat16")),
         patches_per_transition_per_epoch=int(
             train_config["batching"]["patches_per_transition_per_epoch"]
         ),
@@ -63,9 +66,18 @@ def main() -> None:
             train_config["thermal_cooldown_every_epochs"]
         ),
         thermal_cooldown_seconds=float(train_config["thermal_cooldown_seconds"]),
+        patch_batch_size=int(train_config["batching"]["patch_batch_size"]),
+        force_float32_integration=bool(train_config["force_float32_integration"]),
+        mechanistic_learning_rate_scale=float(
+            train_config["mechanistic_learning_rate_scale"]
+        ),
+        warm_start_epochs=int(train_config.get("warm_start_epochs", 0)),
+        gradient_checkpointing=bool(train_config.get("gradient_checkpointing", True)),
     )
     weights = LossWeights(
         distribution=float(train_config["loss"]["lambda_distribution"]),
+        moments=float(train_config["loss"]["lambda_moments"]),
+        wasserstein=float(train_config["loss"]["lambda_wasserstein"]),
         spatial=float(train_config["loss"]["lambda_spatial"]),
         biology=float(train_config["loss"]["lambda_biology"]),
         residual=float(train_config["loss"]["lambda_residual"]),
@@ -160,6 +172,21 @@ def main() -> None:
             print(json.dumps({"status": "partial", "members_completed": members_completed}))
             return
     export_table(pd.DataFrame(history_rows), args.output_dir / "metrics" / "history.csv")
+    validation_design, validation_observed = [], []
+    for transition in validation:
+        _, _, stacked = predict_ensemble(
+            models, transition.source_states, transition.graph, transition.t0, transition.t1,
+            step_size=float(ode["step_size"]), method=ode["solver"],
+        )
+        validation_design.append(stacked.mean(dim=1).numpy().T)
+        validation_observed.append(transition.target_states.mean(dim=0).numpy())
+    ensemble_weights = fit_simplex_weights(
+        np.concatenate(validation_design), np.concatenate(validation_observed)
+    )
+    export_table(
+        pd.DataFrame({"member": np.arange(len(models)), "weight": ensemble_weights}),
+        args.output_dir / "tables" / "ensemble_weights.csv",
+    )
     grouped = {}
     for transition in dataset.transitions(
         mask=test_mask, k=int(model_config["graph"]["k"]), max_nodes=max_nodes
@@ -168,7 +195,7 @@ def main() -> None:
             float(ode["step_size"]),
             abs(transition.t1 - transition.t0) / int(train_config["max_ode_steps_per_transition"]),
         )
-        mean, _, stacked = predict_ensemble(
+        _, _, stacked = predict_ensemble(
             models,
             transition.source_states,
             transition.graph,
@@ -177,18 +204,27 @@ def main() -> None:
             step_size=step_size,
             method=ode["solver"],
         )
+        stacked_numpy = stacked.numpy()
+        mean, _ = weighted_summary(stacked_numpy, ensemble_weights)
         key = transition.evaluation_group or transition.name
         entry = grouped.setdefault(
             key,
             {"means": [], "ensembles": [], "target": transition.target_states.numpy()},
         )
-        entry["means"].append(mean.numpy())
-        entry["ensembles"].append(stacked.numpy())
+        entry["means"].append(mean)
+        entry["ensembles"].append(stacked_numpy)
     rows = []
     for name, entry in grouped.items():
         mean = np.concatenate(entry["means"], axis=0)
         stacked = np.concatenate(entry["ensembles"], axis=1)
-        calibration = distribution_mean_calibration(stacked, entry["target"])
+        member_means = stacked.mean(axis=1)
+        weighted_state_mean, weighted_state_std = weighted_summary(member_means, ensemble_weights)
+        target_state_mean = entry["target"].mean(axis=0)
+        calibration = {
+            "coverage": float(
+                (np.abs(target_state_mean - weighted_state_mean) <= 1.96 * weighted_state_std).mean()
+            )
+        }
         rows.append(
             {
                 "transition": name,
@@ -206,6 +242,8 @@ def main() -> None:
             "status": "complete",
             "device": device,
             "members": args.members,
+            "weighting": "nonnegative simplex weights fitted on zebrafish validation state means",
+            "ensemble_weights": ensemble_weights.tolist(),
             "base_seed": seed,
             "member_seeds": member_seeds,
             "epochs_requested": args.epochs,

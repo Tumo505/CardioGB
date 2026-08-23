@@ -48,14 +48,19 @@ def sliced_wasserstein(
 ) -> Tensor:
     """Approximate W2 using random one-dimensional projections and quantiles."""
     _validate_samples(predicted, observed)
+    # torch.quantile does not accept float16; promotion preserves gradients.
+    if predicted.dtype not in (torch.float32, torch.float64):
+        predicted = predicted.float()
+    if observed.dtype != predicted.dtype:
+        observed = observed.to(dtype=predicted.dtype)
     directions = torch.randn(
         predicted.shape[1], num_projections,
         dtype=predicted.dtype, device=predicted.device, generator=generator,
     )
     directions = directions / directions.norm(dim=0, keepdim=True).clamp_min(1e-8)
-    pred_projection = predicted @ directions
-    obs_projection = observed @ directions
-    q = torch.linspace(0, 1, num_quantiles, dtype=predicted.dtype, device=predicted.device)
+    pred_projection = (predicted @ directions).float()
+    obs_projection = (observed @ directions).float()
+    q = torch.linspace(0, 1, num_quantiles, dtype=torch.float32, device=predicted.device)
     return (
         torch.quantile(pred_projection, q, dim=0) - torch.quantile(obs_projection, q, dim=0)
     ).square().mean()

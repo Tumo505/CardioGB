@@ -21,8 +21,73 @@ def integrate_model(
     method: str = "rk4",
 ) -> Tensor:
     return integrate_fixed_step(
-        lambda t, x: model(t, x, graph), states, t0, t1, step_size=step_size, method=method
+        lambda t, x: model(t, x, graph),
+        states,
+        t0,
+        t1,
+        step_size=step_size,
+        method=method,
+        projector=getattr(model, "project_state", None),
     )
+
+
+def integrate_model_with_residual_energy(
+    model: nn.Module,
+    states: Tensor,
+    graph: Any,
+    t0: float,
+    t1: float,
+    *,
+    step_size: float,
+    method: str = "rk4",
+    checkpoint_steps: bool = False,
+) -> tuple[Tensor, Tensor | None]:
+    """Integrate states and the full-trajectory residual energy together."""
+    if not hasattr(model, "vector_field"):
+        return integrate_fixed_step(
+            lambda t, x: model(t, x, graph),
+            states,
+            t0,
+            t1,
+            step_size=step_size,
+            method=method,
+            projector=getattr(model, "project_state", None),
+            checkpoint_steps=checkpoint_steps,
+        ), None
+
+    state_width = states.shape[-1]
+    augmented = torch.cat((states, states.new_zeros((len(states), 1))), dim=-1)
+
+    def field(t: Tensor, value: Tensor) -> Tensor:
+        x = value[:, :state_width]
+        components = model.vector_field(t, x, graph)
+        residual = components.get("residual")
+        node_energy = (
+            residual.square().mean(dim=-1, keepdim=True)
+            if residual is not None
+            else x.new_zeros((len(x), 1))
+        )
+        return torch.cat((components["total"], node_energy), dim=-1)
+
+    state_projector = getattr(model, "project_state", None)
+
+    def projector(value: Tensor) -> Tensor:
+        if state_projector is None:
+            return value
+        return torch.cat((state_projector(value[:, :state_width]), value[:, state_width:]), dim=-1)
+
+    result = integrate_fixed_step(
+        field,
+        augmented,
+        t0,
+        t1,
+        step_size=step_size,
+        method=method,
+        projector=projector,
+        checkpoint_steps=checkpoint_steps,
+    )
+    duration = max(abs(t1 - t0), torch.finfo(states.dtype).eps)
+    return result[:, :state_width], result[:, state_width].mean() / duration
 
 
 def integrate_trajectory(

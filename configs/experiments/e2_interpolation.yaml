@@ -1,4 +1,6 @@
 name: e2_interpolation
 protocol: leave_intermediate_stage_out
 held_out_stages: [0.5, 3.0, 14.0]
-
+seeds: [20260825, 20260826, 20260827, 20260828, 20260829]
+epochs: 200
+early_stopping_patience: 25

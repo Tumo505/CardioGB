@@ -7,9 +7,11 @@ from collections.abc import Callable
 
 import torch
 from torch import Tensor
+from torch.utils.checkpoint import checkpoint
 
 
 VectorField = Callable[[Tensor, Tensor], Tensor]
+StateProjector = Callable[[Tensor], Tensor]
 
 
 def _step_euler(field: VectorField, t: Tensor, x: Tensor, dt: Tensor) -> Tensor:
@@ -33,6 +35,8 @@ def integrate_fixed_step(
     *,
     step_size: float,
     method: str = "rk4",
+    projector: StateProjector | None = None,
+    checkpoint_steps: bool | int = False,
 ) -> Tensor:
     """Integrate a vector field while preserving gradients and device placement."""
     if t1 < t0:
@@ -49,8 +53,23 @@ def integrate_fixed_step(
     t = torch.as_tensor(t0, dtype=x0.dtype, device=x0.device)
     x = x0
     step = _step_rk4 if method == "rk4" else _step_euler
-    for _ in range(steps):
-        x = step(field, t, x, dt)
+    def advance(current: Tensor, current_time: Tensor) -> Tensor:
+        updated = step(field, current_time, current, dt)
+        return projector(updated) if projector is not None else updated
+
+    checkpoint_interval = (
+        1 if checkpoint_steps is True else int(checkpoint_steps or 0)
+    )
+    for index in range(steps):
+        should_checkpoint = (
+            checkpoint_interval > 0
+            and (index + 1) % checkpoint_interval == 0
+            and torch.is_grad_enabled()
+        )
+        if should_checkpoint:
+            x = checkpoint(advance, x, t, use_reentrant=False)
+        else:
+            x = advance(x, t)
         t = t + dt
     return x
 
