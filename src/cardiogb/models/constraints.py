@@ -11,6 +11,8 @@ def positive(raw: Tensor, transform: str = "softplus") -> Tensor:
         return torch.nn.functional.softplus(raw)
     if transform == "exp":
         return torch.exp(raw)
+    if transform == "identity":
+        return raw
     raise ValueError(f"Unsupported positive-parameter transform: {transform}")
 
 

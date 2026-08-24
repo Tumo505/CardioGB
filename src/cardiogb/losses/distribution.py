@@ -4,28 +4,49 @@ from __future__ import annotations
 
 import torch
 from torch import Tensor
+from torch.utils.checkpoint import checkpoint
 
 
 def rbf_mmd(
     predicted: Tensor,
     observed: Tensor,
     bandwidths: tuple[float, ...] = (0.1, 0.5, 1.0, 2.0),
+    *,
+    chunk_size: int = 256,
 ) -> Tensor:
-    """Biased multi-scale RBF MMD supporting unequal sample counts."""
+    """Biased multi-scale RBF MMD with exact checkpointed kernel chunks."""
     _validate_samples(predicted, observed)
     if not bandwidths or any(value <= 0 for value in bandwidths):
         raise ValueError("bandwidths must contain positive values")
-    xx = torch.cdist(predicted, predicted).square()
-    yy = torch.cdist(observed, observed).square()
-    xy = torch.cdist(predicted, observed).square()
-    loss = predicted.new_zeros(())
-    for bandwidth in bandwidths:
-        denominator = 2 * bandwidth**2
-        loss = loss + torch.exp(-xx / denominator).mean()
-        loss = loss + torch.exp(-yy / denominator).mean()
-        loss = loss - 2 * torch.exp(-xy / denominator).mean()
-    return loss / len(bandwidths)
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
 
+    denominators = predicted.new_tensor([2 * value**2 for value in bandwidths])
+
+    def kernel_means(left: Tensor, right: Tensor) -> Tensor:
+        total = left.new_zeros(len(bandwidths))
+        for start_index in range(0, len(left), chunk_size):
+            left_chunk = left[start_index : start_index + chunk_size]
+
+            def kernel_sums(chunk: Tensor, reference: Tensor) -> Tensor:
+                distances = torch.cdist(chunk, reference).square()
+                return torch.stack(
+                    [torch.exp(-distances / denominator).sum() for denominator in denominators]
+                )
+
+            if torch.is_grad_enabled() and (left_chunk.requires_grad or right.requires_grad):
+                chunk_sums = checkpoint(
+                    kernel_sums, left_chunk, right, use_reentrant=False
+                )
+            else:
+                chunk_sums = kernel_sums(left_chunk, right)
+            total = total + chunk_sums
+        return total / (len(left) * len(right))
+
+    xx = kernel_means(predicted, predicted)
+    yy = kernel_means(observed, observed)
+    xy = kernel_means(predicted, observed)
+    return (xx + yy - 2 * xy).mean()
 
 def moment_matching(predicted: Tensor, observed: Tensor) -> Tensor:
     """Match mean and covariance of two unmatched samples."""

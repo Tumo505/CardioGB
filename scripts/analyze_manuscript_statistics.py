@@ -85,6 +85,52 @@ def e4_biological_ci(path: Path):
     return pd.DataFrame(rows)
 
 
+def e3_calibration_tests(path: Path):
+    if not path.is_file():
+        return pd.DataFrame()
+    frame = pd.read_csv(path)
+    required = [
+        column
+        for metric in METRICS
+        for column in (metric, f"raw_{metric}", f"persistence_{metric}")
+    ]
+    missing = sorted(set(required) - set(frame.columns))
+    if missing:
+        raise ValueError(f"E3 calibration table is missing columns: {missing}")
+    # Average transitions within each independently fitted case-seed model so
+    # long-horizon cases do not receive extra weight merely because they have
+    # more forecast transitions.
+    units = frame.groupby(["case", "seed"], observed=True)[required].mean().reset_index()
+    rows = []
+    for metric in METRICS:
+        for comparator, column in (("raw_cardiogb", f"raw_{metric}"), ("persistence", f"persistence_{metric}")):
+            calibrated = units[metric].to_numpy()
+            baseline = units[column].to_numpy()
+            difference = calibrated - baseline
+            estimate, lower, upper = bootstrap_difference(difference)
+            test = paired_group_permutation_test(calibrated, baseline, seed=20260815)
+            standard_deviation = difference.std(ddof=1)
+            rows.append({
+                "family": "E3 validation-only horizon calibration",
+                "metric": metric,
+                "reference": "calibrated_cardiogb",
+                "comparator": comparator,
+                "mean_difference_calibrated_minus_comparator": estimate,
+                "median_difference_calibrated_minus_comparator": float(np.median(difference)),
+                "paired_standardized_effect_dz": float(estimate / standard_deviation) if standard_deviation > 0 else np.nan,
+                "calibrated_win_fraction_lower_error": float(np.mean(difference < 0)),
+                "ci_lower": lower,
+                "ci_upper": upper,
+                "p_value": test["p_value"],
+                "n_units": len(units),
+                "unit": "case-seed forecast model; transitions averaged within unit",
+            })
+    result = pd.DataFrame(rows)
+    if len(result):
+        result["p_adjust_bh_within_family"] = benjamini_hochberg(result["p_value"].to_numpy())
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description="Formal manuscript statistics and multiple-testing correction")
     parser.add_argument("--results-root", type=Path, default=Path("results"))
@@ -114,6 +160,13 @@ def main():
             outputs[f"{protocol.lower()}_intervals"] = len(result)
         else:
             missing.append(str(path))
+    calibration_path = root / "e3_extrapolation_horizon_calibrated" / "tables" / "all_metrics.csv"
+    result = e3_calibration_tests(calibration_path)
+    if len(result):
+        export_table(result, args.output_dir / "e3_horizon_calibration_paired_tests.csv")
+        outputs["e3_calibration_tests"] = len(result)
+    else:
+        missing.append(str(calibration_path))
     e4_path = root / "e4_group_cv_full" / "tables" / "all_metrics.csv"
     result = e4_biological_ci(e4_path)
     if len(result):
@@ -137,7 +190,7 @@ def main():
             "status": "complete" if not missing else "partial",
             "outputs": outputs, "missing": missing,
             "confidence_intervals": "percentile bootstrap, 10000 resamples",
-            "multiple_testing": "Benjamini-Hochberg within prespecified E1 and E8 test families",
+            "multiple_testing": "Benjamini-Hochberg within prespecified E1, E3 calibration, and E8 test families",
             "external_inference": "descriptive only because mouse has one biological sample per stage",
         },
         args.output_dir / "statistics_manifest.json",

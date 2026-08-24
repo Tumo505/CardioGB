@@ -68,6 +68,8 @@ class MechanisticODE(nn.Module):
                 if initial <= 0:
                     raise ValueError("exponential initial values must be positive")
                 value = float(torch.log(torch.tensor(float(initial))))
+            elif parameter_transform == "identity":
+                value = float(initial)
             else:
                 raise ValueError(f"Unsupported parameter transform: {parameter_transform}")
             raw[name] = nn.Parameter(torch.tensor(value, dtype=torch.float32))

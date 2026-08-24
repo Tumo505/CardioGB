@@ -25,7 +25,7 @@ INTERPOLATION_STAGES = (0.5, 3.0, 14.0)  # configs/experiments/e2_interpolation.
 EXTRAPOLATION_CUTOFFS = (3.0, 7.0, 14.0)
 
 
-def trainer_for(seed: int, epochs: int):
+def trainer_for(seed: int, epochs: int, gradient_checkpoint_interval: int = 2):
     seed_everything(seed)
     model_config = load_yaml("configs/model.yaml")
     train_config = load_yaml("configs/train.yaml")
@@ -58,6 +58,7 @@ def trainer_for(seed: int, epochs: int):
         ),
         warm_start_epochs=int(train_config.get("warm_start_epochs", 0)),
         gradient_checkpointing=bool(train_config.get("gradient_checkpointing", True)),
+        gradient_checkpoint_interval=gradient_checkpoint_interval,
         ),
         loss_weights=LossWeights(
             distribution=float(train_config["loss"]["lambda_distribution"]),
@@ -143,7 +144,10 @@ def build_case(dataset: StateDataset, protocol: str, case: float | int, *, k: in
 
 
 def run_one(dataset, data_path: Path, protocol: str, case, seed: int, epochs: int, output: Path):
-    trainer, model_config, train_config, device = trainer_for(seed, epochs)
+    checkpoint_interval = 1 if protocol in {"e2_interpolation", "e3_extrapolation"} else 2
+    trainer, model_config, train_config, device = trainer_for(
+        seed, epochs, gradient_checkpoint_interval=checkpoint_interval
+    )
     k = int(model_config["graph"]["k"])
     max_nodes = int(train_config["batching"]["max_nodes"])
     train, validation, test, split = build_case(dataset, protocol, case, k=k, max_nodes=max_nodes)

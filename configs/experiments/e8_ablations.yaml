@@ -1,4 +1,13 @@
 name: e8_ablations
-ablations: [mechanism, graph, shuffled_graph, residual_penalty, state_definition]
+ablations:
+  - no_mechanism
+  - no_graph
+  - no_constraints
+  - shuffled_graph
+  - mechanistic_misspecification
+  - residual_penalty_zero
+  - residual_penalty_low
+  - residual_penalty_high
+  - state_definition
 
 seeds: [20260825, 20260826, 20260827, 20260828, 20260829]

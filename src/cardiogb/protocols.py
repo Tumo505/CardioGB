@@ -115,11 +115,24 @@ def evaluate_transitions(
     rows = []
     for name, entry in grouped.items():
         prediction = np.concatenate(entry["predictions"], axis=0)
+        finite = np.isfinite(prediction)
+        all_finite = bool(finite.all())
+        finite_values = prediction[finite]
+        metric_values = (
+            distribution_metrics(prediction, entry["target"])
+            if all_finite
+            else {"mmd": np.nan, "moment_error": np.nan, "sliced_wasserstein": np.nan}
+        )
         row: dict[str, Any] = {
             "transition": name,
             "t0": entry["t0"],
             "t1": entry["t1"],
-            **distribution_metrics(prediction, entry["target"]),
+            **metric_values,
+            "prediction_finite_fraction": float(finite.mean()),
+            "prediction_min": float(finite_values.min()) if len(finite_values) else np.nan,
+            "prediction_max": float(finite_values.max()) if len(finite_values) else np.nan,
+            "prediction_out_of_bounds_fraction": float(((finite_values < 0.0) | (finite_values > 1.0)).mean()) if len(finite_values) else np.nan,
+            "numerically_stable": all_finite,
         }
         if entry["mi"]:
             mi = np.concatenate(entry["mi"])

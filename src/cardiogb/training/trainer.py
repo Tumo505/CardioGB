@@ -49,7 +49,9 @@ class TrainerConfig:
     force_float32_integration: bool = True
     mechanistic_learning_rate_scale: float = 0.25
     gradient_checkpointing: bool = True
-    gradient_checkpoint_interval: int = 3
+    gradient_checkpoint_interval: int = 2
+    cache_transitions_on_device: bool = True
+    max_device_transition_cache_bytes: int = 268_435_456
     warm_start_epochs: int = 0
 
 
@@ -95,6 +97,13 @@ class CrossSectionalTrainer:
             "cuda", enabled=self.amp_enabled and self.amp_dtype == torch.float16
         )
         self.history: list[dict[str, float]] = []
+
+    @staticmethod
+    def _transition_nbytes(transition: CrossSectionalTransition) -> int:
+        tensors = [transition.source_states, transition.target_states]
+        if transition.graph is not None:
+            tensors.extend([transition.graph.edge_index, transition.graph.edge_attr])
+        return sum(tensor.numel() * tensor.element_size() for tensor in tensors if tensor is not None)
 
     def _move_transition(self, transition: CrossSectionalTransition) -> CrossSectionalTransition:
         graph = transition.graph.to(self.device) if hasattr(transition.graph, "to") else transition.graph
@@ -270,6 +279,14 @@ class CrossSectionalTrainer:
         checkpoint_path: str | Path | None = None,
     ) -> list[dict[str, float]]:
         train, validation = list(train), list(validation)
+        transition_cache_bytes = sum(self._transition_nbytes(item) for item in [*train, *validation])
+        if (
+            self.device.type == "cuda"
+            and self.config.cache_transitions_on_device
+            and transition_cache_bytes <= self.config.max_device_transition_cache_bytes
+        ):
+            train = [self._move_transition(item) for item in train]
+            validation = [self._move_transition(item) for item in validation]
         supports_warm_start = (
             hasattr(self.model, "mechanistic_model")
             and hasattr(self.model, "residual_model")

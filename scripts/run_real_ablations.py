@@ -4,6 +4,7 @@ import argparse
 import gc
 import time
 import json
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 
@@ -26,18 +27,30 @@ from cardiogb.utils.seed import seed_everything
 
 
 VARIANTS = (
-    "mechanism",
-    "graph",
+    "no_mechanism",
+    "no_graph",
+    "no_constraints",
     "shuffled_graph",
-    "residual_penalty",
+    "mechanistic_misspecification",
+    "residual_penalty_zero",
+    "residual_penalty_low",
+    "residual_penalty_high",
     "state_definition",
 )
 
+RESIDUAL_PENALTY_MULTIPLIERS = {
+    "residual_penalty_zero": 0.0,
+    "residual_penalty_low": 0.25,
+    "residual_penalty_high": 4.0,
+}
+
 
 def make_model(variant: str, model_config: dict, mechanistic_config: dict):
-    if variant == "mechanism":
-        return build_model("graph_neural_ode", model_config, mechanistic_config)
-    if variant == "graph":
+    if variant == "no_mechanism":
+        model = build_model("cardiogb", model_config, mechanistic_config)
+        model.mechanistic_enabled = False
+        return model
+    if variant == "no_graph":
         gnn = model_config["gnn"]
         residual = NeuralODEFunc(
             state_dim=len(model_config["states"]),
@@ -46,6 +59,19 @@ def make_model(variant: str, model_config: dict, mechanistic_config: dict):
             dropout=float(gnn["dropout"]),
         )
         return CardioGB(MechanisticODE.from_config(mechanistic_config), residual)
+    if variant == "no_constraints":
+        unconstrained_config = deepcopy(mechanistic_config)
+        unconstrained_config["parameter_transform"] = "identity"
+        model = build_model("cardiogb", model_config, unconstrained_config)
+        model.project_state = lambda states: states
+        return model
+    if variant == "mechanistic_misspecification":
+        misspecified_config = deepcopy(mechanistic_config)
+        misspecified_config["interactions"] = [
+            item for item in misspecified_config["interactions"]
+            if not (item["source"] == "F" and item["target"] == "C")
+        ]
+        return build_model("cardiogb", model_config, misspecified_config)
     return build_model("cardiogb", model_config, mechanistic_config)
 
 
@@ -103,7 +129,9 @@ def run_variant(
         mechanistic_learning_rate_scale=float(
             train_config["mechanistic_learning_rate_scale"]
         ),
-        warm_start_epochs=int(train_config.get("warm_start_epochs", 0)),
+        warm_start_epochs=(
+            0 if variant == "no_mechanism" else int(train_config.get("warm_start_epochs", 0))
+        ),
         gradient_checkpointing=bool(train_config.get("gradient_checkpointing", True)),
     )
     weights = LossWeights(
@@ -111,8 +139,9 @@ def run_variant(
         moments=float(train_config["loss"]["lambda_moments"]),
         wasserstein=float(train_config["loss"]["lambda_wasserstein"]),
         spatial=float(train_config["loss"]["lambda_spatial"]),
-        biology=float(train_config["loss"]["lambda_biology"]),
-        residual=0.0 if variant == "residual_penalty" else float(train_config["loss"]["lambda_residual"]),
+        biology=0.0 if variant == "no_constraints" else float(train_config["loss"]["lambda_biology"]),
+        residual=float(train_config["loss"]["lambda_residual"])
+        * RESIDUAL_PENALTY_MULTIPLIERS.get(variant, 1.0),
     )
     device = resolve_device(train_config.get("device", "auto")).selected
     if device == "cuda":
@@ -143,7 +172,15 @@ def run_variant(
         row.update({"ablation": variant, "seed": seed})
     export_table(pd.DataFrame(rows), output / "metrics" / "test.csv")
     atomic_json(
-        {"status": "complete", "ablation": variant, "seed": seed, "epochs_completed": len(history), "device": device},
+        {
+            "status": "complete", "ablation": variant, "seed": seed,
+            "epochs_completed": len(history), "device": device,
+            "residual_penalty_multiplier": RESIDUAL_PENALTY_MULTIPLIERS.get(variant, 1.0),
+            "mechanistic_component": variant != "no_mechanism",
+            "state_projection": variant != "no_constraints",
+            "positive_parameter_transform": variant != "no_constraints",
+            "omitted_mechanistic_interaction": "F_to_C" if variant == "mechanistic_misspecification" else None,
+        },
         output / "done.json",
     )
 

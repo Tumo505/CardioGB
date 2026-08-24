@@ -18,6 +18,7 @@ from cardiogb.metrics.uncertainty import distribution_mean_calibration
 from cardiogb.models.factory import build_model
 from cardiogb.training.ensemble import predict_ensemble
 from cardiogb.training.ensemble_weighting import fit_simplex_weights, weighted_summary
+from cardiogb.training.robust_ensemble import aggregate_members, select_aggregation
 from cardiogb.training.trainer import CrossSectionalTrainer, TrainerConfig
 from cardiogb.utils.config import load_yaml
 from cardiogb.utils.device import resolve_device
@@ -99,11 +100,6 @@ def main() -> None:
     history_rows = []
     member_seeds = []
     newly_trained = 0
-    all_members_ready = all(
-        (args.output_dir / "checkpoints" / f"member_{member:02d}.pt").is_file()
-        and (args.output_dir / "members" / f"member_{member:02d}.json").is_file()
-        for member in range(args.members)
-    )
     for member in range(args.members):
         member_seed = seed + member
         member_seeds.append(member_seed)
@@ -113,11 +109,10 @@ def main() -> None:
         seed_everything(member_seed)
         model = build_model("cardiogb", model_config, mech_config)
         if marker.is_file() and checkpoint.is_file():
-            if all_members_ready:
-                payload = torch.load(checkpoint, map_location=device, weights_only=False)
-                model.load_state_dict(payload["model"])
-                model.to(device)
-                models.append(model)
+            payload = torch.load(checkpoint, map_location=device, weights_only=False)
+            model.load_state_dict(payload["model"])
+            model.to(device)
+            models.append(model)
             if history_path.is_file():
                 history_rows.extend(pd.read_csv(history_path).to_dict("records"))
         else:
@@ -172,20 +167,29 @@ def main() -> None:
             print(json.dumps({"status": "partial", "members_completed": members_completed}))
             return
     export_table(pd.DataFrame(history_rows), args.output_dir / "metrics" / "history.csv")
-    validation_design, validation_observed = [], []
+    validation_design, validation_observed, validation_groups = [], [], []
     for transition in validation:
         _, _, stacked = predict_ensemble(
             models, transition.source_states, transition.graph, transition.t0, transition.t1,
             step_size=float(ode["step_size"]), method=ode["solver"],
         )
-        validation_design.append(stacked.mean(dim=1).numpy().T)
+        member_means = stacked.mean(dim=1).numpy().T
+        validation_design.append(member_means)
         validation_observed.append(transition.target_states.mean(dim=0).numpy())
-    ensemble_weights = fit_simplex_weights(
-        np.concatenate(validation_design), np.concatenate(validation_observed)
+        validation_groups.extend([transition.evaluation_group or transition.name] * len(member_means))
+    validation_design = np.concatenate(validation_design)
+    validation_observed = np.concatenate(validation_observed)
+    ensemble_weights = fit_simplex_weights(validation_design, validation_observed)
+    aggregation_method, aggregation_scores = select_aggregation(
+        validation_design, validation_observed, np.asarray(validation_groups)
     )
     export_table(
         pd.DataFrame({"member": np.arange(len(models)), "weight": ensemble_weights}),
         args.output_dir / "tables" / "ensemble_weights.csv",
+    )
+    export_table(
+        pd.DataFrame([{"method": key, "validation_group_cv_mse": value, "selected": key == aggregation_method} for key, value in aggregation_scores.items()]),
+        args.output_dir / "tables" / "aggregation_selection.csv",
     )
     grouped = {}
     for transition in dataset.transitions(
@@ -205,7 +209,7 @@ def main() -> None:
             method=ode["solver"],
         )
         stacked_numpy = stacked.numpy()
-        mean, _ = weighted_summary(stacked_numpy, ensemble_weights)
+        mean = aggregate_members(stacked_numpy, aggregation_method, ensemble_weights)
         key = transition.evaluation_group or transition.name
         entry = grouped.setdefault(
             key,
@@ -218,7 +222,10 @@ def main() -> None:
         mean = np.concatenate(entry["means"], axis=0)
         stacked = np.concatenate(entry["ensembles"], axis=1)
         member_means = stacked.mean(axis=1)
-        weighted_state_mean, weighted_state_std = weighted_summary(member_means, ensemble_weights)
+        weighted_state_mean = aggregate_members(member_means, aggregation_method, ensemble_weights)
+        weighted_state_std = np.sqrt(
+            np.tensordot(ensemble_weights, (member_means - weighted_state_mean) ** 2, axes=(0, 0))
+        )
         target_state_mean = entry["target"].mean(axis=0)
         calibration = {
             "coverage": float(
@@ -243,6 +250,9 @@ def main() -> None:
             "device": device,
             "members": args.members,
             "weighting": "nonnegative simplex weights fitted on zebrafish validation state means",
+            "aggregation_selection": "leave-one-validation-transition-out comparison of simplex, equal mean, coordinate median, and trimmed mean",
+            "selected_aggregation": aggregation_method,
+            "aggregation_validation_mse": aggregation_scores,
             "ensemble_weights": ensemble_weights.tolist(),
             "base_seed": seed,
             "member_seeds": member_seeds,

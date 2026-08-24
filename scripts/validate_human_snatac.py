@@ -9,7 +9,8 @@ import anndata as ad
 import numpy as np
 import pandas as pd
 from scipy import sparse
-from scipy.stats import kruskal, mannwhitneyu
+from scipy.stats import kruskal, mannwhitneyu, norm
+import statsmodels.api as sm
 
 from cardiogb.utils.config import load_yaml
 from cardiogb.utils.io import atomic_json, export_table
@@ -41,6 +42,79 @@ def median_difference_ci(first, second, *, seed, n_resamples=10000):
         b = rng.choice(second, size=len(second), replace=True)
         draws[iteration] = np.median(a) - np.median(b)
     return estimate, float(np.quantile(draws, 0.025)), float(np.quantile(draws, 0.975))
+
+
+def clustered_group_model(patient: pd.DataFrame, pathway: str):
+    data = patient[["patient", "patient_group", pathway]].dropna().copy()
+    data["patient"] = data["patient"].astype(str)
+    data["patient_group"] = data["patient_group"].astype(str)
+    groups = sorted(data["patient_group"].unique())
+    if len(groups) < 2 or data["patient"].nunique() < 3:
+        raise ValueError("cluster-robust group inference requires at least two groups and three patients")
+    design = pd.get_dummies(data["patient_group"], dtype=float).reindex(columns=groups, fill_value=0.0)
+    model = sm.OLS(data[pathway].to_numpy(float), design.to_numpy(float)).fit(
+        cov_type="cluster", cov_kwds={"groups": data["patient"].to_numpy(), "use_correction": True}
+    )
+    contrast = np.zeros((len(groups) - 1, len(groups)), dtype=float)
+    for row, column in enumerate(range(1, len(groups))):
+        contrast[row, 0] = -1.0
+        contrast[row, column] = 1.0
+    omnibus = model.wald_test(contrast, use_f=False, scalar=True)
+    return data, groups, model, omnibus
+
+
+def clustered_pair_contrast(model, groups, first_name: str, second_name: str):
+    contrast = np.zeros(len(groups), dtype=float)
+    contrast[groups.index(first_name)] = 1.0
+    contrast[groups.index(second_name)] = -1.0
+    estimate = float(contrast @ model.params)
+    variance = float(contrast @ np.asarray(model.cov_params()) @ contrast)
+    standard_error = float(np.sqrt(max(variance, 0.0)))
+    statistic = estimate / standard_error if standard_error > 0 else np.nan
+    pvalue = float(2.0 * norm.sf(abs(statistic))) if np.isfinite(statistic) else np.nan
+    return estimate, standard_error, float(statistic), pvalue
+
+
+def clustered_median_difference_ci(
+    patient: pd.DataFrame,
+    pathway: str,
+    first_name: str,
+    second_name: str,
+    *,
+    seed: int,
+    n_resamples: int = 10000,
+):
+    data = patient[["patient", "patient_group", pathway]].dropna().copy()
+    data["patient"] = data["patient"].astype(str)
+    data["patient_group"] = data["patient_group"].astype(str)
+    first = data.loc[data["patient_group"] == first_name, pathway].to_numpy(float)
+    second = data.loc[data["patient_group"] == second_name, pathway].to_numpy(float)
+    estimate = float(np.median(first) - np.median(second))
+    patient_ids = data["patient"].unique()
+    grouped = {name: part for name, part in data.groupby("patient", observed=True)}
+    rng = np.random.default_rng(seed)
+    draws = []
+    for _ in range(n_resamples):
+        sampled = rng.choice(patient_ids, size=len(patient_ids), replace=True)
+        pieces = [grouped[name] for name in sampled]
+        bootstrap = pd.concat(pieces, ignore_index=True)
+        a = bootstrap.loc[bootstrap["patient_group"] == first_name, pathway].to_numpy(float)
+        b = bootstrap.loc[bootstrap["patient_group"] == second_name, pathway].to_numpy(float)
+        if len(a) and len(b):
+            draws.append(float(np.median(a) - np.median(b)))
+    if not draws:
+        return estimate, np.nan, np.nan
+    return estimate, float(np.quantile(draws, 0.025)), float(np.quantile(draws, 0.975))
+
+
+def robust_unit_scale(values: np.ndarray, lower_quantile: float = 0.01, upper_quantile: float = 0.99) -> np.ndarray:
+    values = np.asarray(values, dtype=float)
+    if values.ndim != 1 or not np.isfinite(values).all():
+        raise ValueError("pathway values must be a finite one-dimensional array")
+    lower, upper = np.quantile(values, [lower_quantile, upper_quantile])
+    if upper <= lower:
+        return np.zeros_like(values, dtype=np.float32)
+    return np.clip((values - lower) / (upper - lower), 0.0, 1.0).astype(np.float32)
 
 
 def main():
@@ -81,16 +155,27 @@ def main():
         pathway: [union_position[index] for index in indices]
         for pathway, indices in selected.items()
     }
+    feature_sum = np.zeros(len(union), dtype=np.float64)
+    feature_square_sum = np.zeros(len(union), dtype=np.float64)
     for start in range(0, dataset.n_obs, args.batch_size):
         stop = min(start + args.batch_size, dataset.n_obs)
         block = dataset.X[start:stop, union]
+        dense = block.toarray() if sparse.issparse(block) else np.asarray(block)
+        feature_sum += dense.sum(axis=0, dtype=np.float64)
+        feature_square_sum += np.square(dense, dtype=np.float64).sum(axis=0)
+    feature_mean = feature_sum / dataset.n_obs
+    feature_variance = np.maximum(feature_square_sum / dataset.n_obs - np.square(feature_mean), 0.0)
+    feature_std = np.sqrt(feature_variance)
+    feature_std[feature_std <= np.finfo(np.float64).eps] = 1.0
+    for start in range(0, dataset.n_obs, args.batch_size):
+        stop = min(start + args.batch_size, dataset.n_obs)
+        block = dataset.X[start:stop, union]
+        dense = block.toarray() if sparse.issparse(block) else np.asarray(block)
+        standardized = (dense - feature_mean) / feature_std
         for pathway, indices in local_selected.items():
-            pathway_block = block[:, indices]
-            if sparse.issparse(pathway_block):
-                values = np.asarray(pathway_block.mean(axis=1)).ravel()
-            else:
-                values = np.asarray(pathway_block).mean(axis=1)
-            scores[pathway][start:stop] = values
+            scores[pathway][start:stop] = standardized[:, indices].mean(axis=1)
+    for pathway in scores:
+        scores[pathway] = robust_unit_scale(scores[pathway])
     frame = dataset.obs[["patient", "patient_group", "region", "sample", "cell_type_original"]].reset_index(drop=False)
     for pathway, values in scores.items():
         frame[pathway] = values
@@ -106,25 +191,35 @@ def main():
     grouped_patients = {str(name): part for name, part in patient.groupby("patient_group", observed=True)}
     for pathway_index, pathway in enumerate(scores):
         groups = [part[pathway].to_numpy() for part in grouped_patients.values() if len(part)]
-        statistic, pvalue = kruskal(*groups)
+        statistic, descriptive_pvalue = kruskal(*groups)
         group_count = len(groups)
         epsilon_squared = max(0.0, float((statistic - group_count + 1) / max(len(patient) - group_count, 1)))
+        model_data, model_groups, cluster_model, omnibus = clustered_group_model(patient, pathway)
         tests.append({
             "pathway": pathway,
-            "test": "Kruskal-Wallis across patient groups",
-            "statistic": float(statistic),
-            "epsilon_squared": epsilon_squared,
-            "p_value": float(pvalue),
-            "biological_unit": "patient",
-            "n_patients": len(patient),
+            "test": "patient-cluster-robust OLS omnibus Wald test",
+            "statistic": float(omnibus.statistic),
+            "degrees_of_freedom": group_count - 1,
+            "p_value": float(omnibus.pvalue),
+            "descriptive_kruskal_statistic": float(statistic),
+            "descriptive_kruskal_p_value": float(descriptive_pvalue),
+            "descriptive_epsilon_squared": epsilon_squared,
+            "biological_unit": "patient cluster",
+            "n_patients": int(model_data["patient"].nunique()),
+            "n_patient_group_rows": len(model_data),
         })
         for contrast_index, (first_name, second_name) in enumerate(combinations(sorted(grouped_patients), 2)):
             first = grouped_patients[first_name][pathway].to_numpy()
             second = grouped_patients[second_name][pathway].to_numpy()
-            test = mannwhitneyu(first, second, alternative="two-sided", method="auto")
-            estimate, lower, upper = median_difference_ci(
-                first,
-                second,
+            descriptive_test = mannwhitneyu(first, second, alternative="two-sided", method="auto")
+            adjusted_difference, cluster_se, cluster_z, cluster_p = clustered_pair_contrast(
+                cluster_model, model_groups, first_name, second_name
+            )
+            estimate, lower, upper = clustered_median_difference_ci(
+                patient,
+                pathway,
+                first_name,
+                second_name,
                 seed=20260815 + pathway_index * 100 + contrast_index,
             )
             posthoc.append({
@@ -140,9 +235,13 @@ def main():
                 "median_difference_ci_lower": lower,
                 "median_difference_ci_upper": upper,
                 "cliffs_delta_group_1_minus_group_2": cliffs_delta(first, second),
-                "mann_whitney_u": float(test.statistic),
-                "p_value": float(test.pvalue),
-                "biological_unit": "patient",
+                "cluster_robust_mean_difference_group_1_minus_group_2": adjusted_difference,
+                "cluster_robust_standard_error": cluster_se,
+                "cluster_robust_z": cluster_z,
+                "p_value": cluster_p,
+                "mann_whitney_u_descriptive": float(descriptive_test.statistic),
+                "mann_whitney_p_value_descriptive": float(descriptive_test.pvalue),
+                "biological_unit": "patient cluster",
             })
     test_frame = pd.DataFrame(tests)
     test_frame["p_adjust_bh"] = bh_adjust(test_frame["p_value"])
@@ -159,10 +258,13 @@ def main():
     manifest = {
         "status": "complete", "path": str(args.data), "shape": [int(dataset.n_obs), int(dataset.n_vars)],
         "obs_names_unique": bool(dataset.obs_names.is_unique), "var_names_unique": bool(dataset.var_names.is_unique),
-        "matrix_mode": "backed; one union-pathway column read per cell batch",
+        "matrix_mode": "backed two-pass scoring; only union-pathway columns materialized per cell batch",
+        "input_normalization": str(dataset.uns.get("X_normalization", "unspecified")),
+        "pathway_scoring": "submitted normalized gene activity; per-feature standardization; within-pathway mean; 1st/99th percentile clipping and [0,1] mapping",
         "pathway_source": str(args.pathways), "pathway_version": pathway_config["version"],
-        "categories": categories, "inference_unit": "patient",
-        "posthoc": "pairwise Mann-Whitney tests with Cliff delta, median-difference bootstrap intervals, and BH correction",
+        "categories": categories, "inference_unit": "patient cluster; repeated patient-group regions retained within cluster",
+        "omnibus": "OLS group means with patient-cluster-robust covariance and Wald test; Kruskal-Wallis retained descriptively",
+        "posthoc": "patient-cluster-robust group contrasts with Cliff delta, whole-patient bootstrap median-difference intervals, and BH correction; Mann-Whitney retained descriptively",
         "limitations": [
             "X is interpreted as the submitted feature matrix; no peak-to-gene causality is inferred",
             "pathway means are regulatory-feature summaries and are not interchangeable with RNA expression scores",

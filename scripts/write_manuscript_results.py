@@ -61,9 +61,22 @@ def temporal_text(root: Path) -> str:
     maximum = e3["moment_error"].max()
     medians = e3.groupby("horizon_days", observed=True)["moment_error"].median()
     trend = "increased" if medians.corr(pd.Series(medians.index, index=medians.index), method="spearman") > 0 else "did not increase monotonically"
+    calibration_path = root / "e3_extrapolation_horizon_calibrated" / "tables" / "all_metrics.csv"
+    calibration_text = ""
+    if calibration_path.is_file():
+        calibrated = pd.read_csv(calibration_path)
+        calibrated_mean = calibrated["sliced_wasserstein"].mean()
+        raw_mean = calibrated["raw_sliced_wasserstein"].mean()
+        persistence_mean = calibrated["persistence_sliced_wasserstein"].mean()
+        calibration_text = (
+            " Validation-only horizon calibration yielded mean sliced-Wasserstein error "
+            f"{number(calibrated_mean)}, compared with {number(raw_mean)} for the same raw forecasts "
+            f"and {number(persistence_mean)} for persistence; paired corrected tests are reported in Table S6b."
+        )
     return (
         "Mean E2 sliced-Wasserstein errors by held-out stage were " + "; ".join(parts) + ". "
         f"All revised E3 metrics were {'finite' if finite else 'not finite'}, with a maximum moment error of {number(maximum)}; median moment error {trend} with forecast horizon."
+        + calibration_text
     )
 
 
@@ -81,6 +94,28 @@ def generalization_recovery_text(root: Path) -> str:
     )
 
 
+def ablation_text(root: Path) -> str:
+    frame = pd.read_csv(require(root / "final_full_ablations" / "tables" / "ablation_metrics.csv"))
+    seed_level = frame.groupby(["ablation", "seed"], observed=True)["sliced_wasserstein"].mean().reset_index()
+    means = seed_level.groupby("ablation", observed=True)["sliced_wasserstein"].mean().sort_values()
+    full = float(means["full"])
+    alternatives = means.drop(index="full")
+    best_name, worst_name = alternatives.index[0], alternatives.index[-1]
+    tests = pd.read_csv(require(root / "formal_statistics_revised" / "e8_paired_tests.csv"))
+    significant = int((tests["p_adjust_bh_within_family"] < 0.05).sum())
+    no_constraints = frame[frame["ablation"] == "no_constraints"]
+    finite_fraction = float(no_constraints["prediction_finite_fraction"].mean())
+    violation_fraction = float(no_constraints["prediction_out_of_bounds_fraction"].mean())
+    return (
+        f"The full model had mean sliced-Wasserstein error {number(full)}. Among component ablations, "
+        f"{best_name.replace('_', ' ')} had the lowest mean ({number(alternatives.iloc[0])}) and "
+        f"{worst_name.replace('_', ' ')} the highest ({number(alternatives.iloc[-1])}). "
+        f"Without registered constraints, the mean finite-prediction fraction was {number(finite_fraction)} "
+        f"and the finite-value state-range violation fraction was {number(violation_fraction)}. "
+        f"{significant} of {len(tests)} prespecified seed-paired ablation contrasts survived within-family BH correction."
+    )
+
+
 def interpretation_text(root: Path) -> str:
     base = root / "e7_full_interpretation"
     stage = pd.read_csv(require(base / "tables" / "mi_stage_bootstrap.csv"))
@@ -90,7 +125,7 @@ def interpretation_text(root: Path) -> str:
     peak = stage.loc[stage["mi_mean"].idxmax()]
     return (
         f"Mean mechanistic insufficiency peaked at {peak['stage_days']:g} days ({number(peak['mi_mean'])}, 95% CI {number(peak['ci_lower'])}–{number(peak['ci_upper'])}). "
-        f"The cross-seed standardized parameter matrix had effective rank {int(diagnostics['effective_rank'])} among {int(diagnostics['parameters'])} parameters and maximum absolute pairwise correlation {number(diagnostics['maximum_absolute_pair_correlation'])}; these diagnostics indicate practical non-identifiability whenever the rank is deficient or correlations approach one. "
+        f"The cross-seed-and-fold standardized parameter matrix had effective rank {int(diagnostics['effective_rank'])} among {int(diagnostics['parameters'])} parameters and maximum absolute pairwise correlation {number(diagnostics['maximum_absolute_pair_correlation'])}. Held-out local sensitivity profiles had effective rank {int(diagnostics['local_sensitivity_effective_rank'])} and maximum absolute pairwise profile correlation {number(diagnostics['maximum_absolute_local_sensitivity_profile_correlation'])}; these diagnostics indicate practical non-identifiability whenever ranks are deficient, sensitivities are weak, or correlations approach one. "
         f"{len(significant)} of {len(association)} pathway–insufficiency associations survived BH correction. Residual attributions are reported as model-derived, hypothesis-generating associations rather than causal effects."
     )
 
@@ -129,15 +164,19 @@ def main() -> None:
 
 ### Temporal interpolation, extrapolation, and grouped generalization
 
-{temporal_text(root)} {generalization_recovery_text(root)} These results are shown in Figures 4–5 and Tables S5–S9.
+{temporal_text(root)} {generalization_recovery_text(root)} These results are shown in Figures 4–5 and Tables S5–S9 and S17–S21.
+
+### Component ablations
+
+{ablation_text(root)} Complete variant-, seed-, and transition-level outputs are provided in Figure 5 and Tables S10 and S22.
 
 ### Mechanistic insufficiency, parameter stability, and residual attribution
 
-{interpretation_text(root)} Complete section-, biological-unit-, member-, and pathway-level outputs are provided in Figure 6 and Tables S11–S12.
+{interpretation_text(root)} Complete section-, biological-unit-, member-, pathway-, and local-sensitivity outputs are provided in Figure 6 and Tables S11–S12, S29–S32, and S38–S39.
 
 ### Ensemble uncertainty, mouse external prediction, and human-MI translation
 
-{external_human_text(root)} Mouse results remain descriptive because the available series contains one spatial sample per stage. Human accessibility differences are translational associations and not a temporal forecasting validation. These analyses are summarized in Figures 7–8 and Tables S13–S16.
+{external_human_text(root)} Mouse results remain descriptive because the available series contains one spatial sample per stage. Human accessibility differences are translational associations and not a temporal forecasting validation. These analyses are summarized in Figures 7–8 and Tables S13–S16, S23–S28, and S33–S37.
 
 ## Discussion
 
@@ -145,7 +184,7 @@ This study evaluated whether a bounded mechanistic scaffold and a spatial neural
 
 Predictive superiority is judged jointly rather than from a single favorable metric. The E1 paired results establish whether CardioGB improves over neural and persistence comparators under identical biological-unit splits; E2 and E3 determine whether any gain survives temporal displacement; and E4 tests whether it generalizes across registered biological replicates. Where the final tables do not support an advantage or a corrected test is non-significant, the manuscript reports that result directly. Increasing E1 from five to ten seeds was specified before examining revised-model outcomes to improve precision, not to guarantee statistical significance.
 
-The mechanistic-insufficiency analysis gives the residual a specific scientific role: it identifies stages, pathway states, and spatial contexts in which the registered ODE is systematically incomplete. Nevertheless, integrated-gradient attribution and in-silico perturbation remain properties of the fitted model. They prioritize hypotheses for experimental perturbation but do not establish molecular causality. Likewise, cross-seed parameter stability is weaker than structural identifiability. A deficient effective rank or strong parameter correlations indicates that several effective coefficients can exchange roles while preserving predictions, and such coefficients should not be interpreted individually as biochemical rates.
+The mechanistic-insufficiency analysis gives the residual a specific scientific role: it identifies stages, pathway states, and spatial contexts in which the registered ODE is systematically incomplete. Nevertheless, integrated-gradient attribution and in-silico perturbation remain properties of the fitted model. They prioritize hypotheses for experimental perturbation but do not establish molecular causality. Likewise, cross-seed-and-fold parameter stability is weaker than structural identifiability. A deficient effective rank or strong parameter correlations indicates that several effective coefficients can exchange roles while preserving predictions, and such coefficients should not be interpreted individually as biochemical rates.
 
 Frozen mouse prediction is the strongest available test of external transportability because it prohibits retraining and mouse-informed weighting. Pathway conservation and predictive transfer are distinct: conserved temporal ordering can coexist with poor quantitative forecasts when species, injury paradigms, measurement technologies, or time scales differ. With one mouse specimen per stage, even favorable transition metrics would remain preliminary. The human-MI analysis addresses a different question—whether the six programs show patient-level chromatin-accessibility variation in human disease—and cannot validate zebrafish repair dynamics.
 

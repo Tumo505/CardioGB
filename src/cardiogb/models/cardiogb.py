@@ -46,6 +46,7 @@ class CardioGB(nn.Module):
         self.raw_mechanistic_gate = nn.Parameter(
             torch.logit(torch.tensor(gate_ratio, dtype=torch.float32)).repeat(state_dim)
         )
+        self.mechanistic_enabled = True
         self.residual_enabled = True
 
     def residual_scale(self) -> Tensor:
@@ -61,8 +62,11 @@ class CardioGB(nn.Module):
         return states.clamp(min=self.state_min, max=self.state_max)
 
     def vector_field(self, t: Tensor | float, states: Tensor, graph: Any = None) -> dict[str, Tensor]:
-        mechanistic_raw = self.mechanistic_model(t, states)
-        mechanistic = self.mechanistic_gate().to(dtype=states.dtype) * mechanistic_raw
+        if self.mechanistic_enabled:
+            mechanistic_raw = self.mechanistic_model(t, states)
+            mechanistic = self.mechanistic_gate().to(dtype=states.dtype) * mechanistic_raw
+        else:
+            mechanistic = torch.zeros_like(states)
         if self.residual_enabled:
             residual_raw = self.residual_model(t, states, graph)
             residual = self.residual_scale().to(dtype=states.dtype) * torch.tanh(residual_raw)

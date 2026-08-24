@@ -71,7 +71,42 @@ def main() -> None:
         "Table_S14_uncertainty_inference.csv": root / "external_predictive_validation_revised" / "tables" / "uncertainty_inferential_tests.csv",
         "Table_S15_human_MI_omnibus.csv": root / "human_snatac_validation_revised" / "tables" / "patient_group_tests.csv",
         "Table_S16_human_MI_posthoc_effects.csv": root / "human_snatac_validation_revised" / "tables" / "patient_group_posthoc_effects.csv",
+        "Table_S17_E2_confidence_intervals.csv": root / "formal_statistics_revised" / "e2_confidence_intervals.csv",
+        "Table_S18_E3_confidence_intervals.csv": root / "formal_statistics_revised" / "e3_confidence_intervals.csv",
+        "Table_S19_E4_biological_fold_confidence_intervals.csv": root / "formal_statistics_revised" / "e4_biological_unit_confidence_intervals.csv",
+        "Table_S20_E5_parameter_recovery_confidence_intervals.csv": root / "synthetic_recovery_full" / "tables" / "e5_confidence_intervals.csv",
+        "Table_S21_E6_hidden_recovery_confidence_intervals.csv": root / "synthetic_recovery_full" / "tables" / "e6_confidence_intervals.csv",
+        "Table_S22_E8_paired_statistics.csv": root / "formal_statistics_revised" / "e8_paired_tests.csv",
+        "Table_S23_ensemble_test_metrics.csv": root / "final_full_ensemble" / "metrics" / "ensemble_test.csv",
+        "Table_S24_ensemble_weights.csv": root / "final_full_ensemble" / "tables" / "ensemble_weights.csv",
+        "Table_S25_ensemble_aggregation_selection.csv": root / "final_full_ensemble" / "tables" / "aggregation_selection.csv",
+        "Table_S26_mouse_matched_stage_scores.csv": root / "mouse_validation_revised" / "matched_stage_scores.csv",
+        "Table_S27_mouse_pathway_conservation.csv": root / "mouse_validation_revised" / "pathway_conservation.csv",
+        "Table_S28_external_descriptive_comparisons.csv": root / "formal_statistics_revised" / "external_descriptive_comparisons.csv",
+        "Table_S29_E7_parameter_identifiability_diagnostics.csv": root / "e7_full_interpretation" / "tables" / "parameter_identifiability_diagnostics.csv",
+        "Table_S30_E7_parameter_pair_correlations.csv": root / "e7_full_interpretation" / "tables" / "parameter_pair_correlations.csv",
+        "Table_S31_E7_mechanistic_insufficiency_by_stage.csv": root / "e7_full_interpretation" / "tables" / "mi_stage_bootstrap.csv",
+        "Table_S32_E7_mechanistic_insufficiency_pathway_associations.csv": root / "e7_full_interpretation" / "tables" / "mi_pathway_associations.csv",
+        "Table_S33_human_pathway_feature_coverage.csv": root / "human_snatac_validation_revised" / "tables" / "pathway_feature_coverage.csv",
+        "Table_S34_human_patient_region_pathways.csv": root / "human_snatac_validation_revised" / "tables" / "patient_region_pathway_accessibility.csv",
+        "Table_S35_human_patient_celltype_pathways.csv": root / "human_snatac_validation_revised" / "tables" / "patient_celltype_pathway_accessibility.csv",
+        "Table_S36_external_state_mean_predictions.csv": root / "external_predictive_validation_revised" / "tables" / "state_mean_predictions.csv",
+        "Table_S37_human_patient_pathway_accessibility.csv": root / "human_snatac_validation_revised" / "tables" / "patient_pathway_accessibility.csv",
+        "Table_S38_E7_local_parameter_sensitivity.csv": root / "e7_full_interpretation" / "tables" / "parameter_local_sensitivity.csv",
+        "Table_S39_E7_local_sensitivity_profile_correlations.csv": root / "e7_full_interpretation" / "tables" / "parameter_local_sensitivity_correlations.csv",
     }
+    calibration_metrics = root / "e3_extrapolation_horizon_calibrated" / "tables" / "all_metrics.csv"
+    calibration_tests = root / "formal_statistics_revised" / "e3_horizon_calibration_paired_tests.csv"
+    if calibration_metrics.is_file():
+        sources["Table_S6b_E3_horizon_calibration_metrics.csv"] = calibration_metrics
+    if calibration_tests.is_file():
+        sources["Table_S6c_E3_horizon_calibration_statistics.csv"] = calibration_tests
+    e7_protocol_stability = root / "e7_full_interpretation" / "tables" / "parameter_stability_by_protocol.csv"
+    e7_heldout_attribution = root / "e7_full_interpretation" / "tables" / "residual_attribution_heldout.csv"
+    if e7_protocol_stability.is_file():
+        sources["Table_S11b_E7_parameter_stability_by_protocol.csv"] = e7_protocol_stability
+    if e7_heldout_attribution.is_file():
+        sources["Table_S12b_E7_heldout_residual_attribution.csv"] = e7_heldout_attribution
     for name, source in sources.items():
         copy_table(source, args.output_dir / name)
     atomic_json(

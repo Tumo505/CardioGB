@@ -22,6 +22,7 @@ def stages() -> list[tuple[str, list[str]]]:
         ("e5_e6_synthetic", [python, "scripts/run_synthetic_matrix.py", "--output-dir", "results/synthetic_recovery_full", "--epochs", "300", "--seeds", *SYNTHETIC_SEEDS_5, "--noise", "0", "0.01", "0.05", "0.1"]),
         ("e2_interpolation", [python, "scripts/run_manuscript_training.py", "--data", zebrafish, "--protocol", "e2_interpolation", "--output-dir", "results/e2_interpolation_revised", "--epochs", "200", "--seeds", *FINAL_REAL_SEEDS_5]),
         ("e3_extrapolation", [python, "scripts/run_manuscript_training.py", "--data", zebrafish, "--protocol", "e3_extrapolation", "--output-dir", "results/e3_extrapolation_revised", "--epochs", "200", "--seeds", *FINAL_REAL_SEEDS_5]),
+        ("e3_horizon_calibration", [python, "scripts/calibrate_extrapolation_horizon.py", "--data", zebrafish, "--checkpoint-root", "results/e3_extrapolation_revised", "--output-dir", "results/e3_extrapolation_horizon_calibrated"]),
         ("e4_group_cv", [python, "scripts/run_manuscript_training.py", "--data", zebrafish, "--protocol", "e4_group_cv", "--output-dir", "results/e4_group_cv_full", "--epochs", "200", "--seeds", *FINAL_REAL_SEEDS_5]),
         ("e8_ablations", [python, "scripts/run_real_ablations.py", "--data", zebrafish, "--rank-data", "data/processed/zebrafish_states_rank_mean.npz", "--output-dir", "results/final_full_ablations", "--reference-dir", "results/final_full_multiseed", "--epochs", "200", "--seeds", *FINAL_REAL_SEEDS_5, "--max-new-models", "0"]),
         ("e9_ensemble", [python, "scripts/train_ensemble.py", "--data", zebrafish, "--output-dir", "results/final_full_ensemble", "--members", "5", "--epochs", "200", "--seed", "20260825", "--max-new-members", "0"]),
@@ -31,9 +32,11 @@ def stages() -> list[tuple[str, list[str]]]:
         ("e7_interpretation", [python, "scripts/run_full_interpretation.py", "--data", zebrafish, "--checkpoint-root", "results/final_full_multiseed", "--output-dir", "results/e7_full_interpretation", "--ig-steps", "8", "--k", "8"]),
         ("human_snatac", [python, "scripts/validate_human_snatac.py", "--data", "data/external/human_mi/zenodo_6578047/snatac/snATAC-seq-submission.h5ad", "--output-dir", "results/human_snatac_validation_revised", "--batch-size", "4096"]),
         ("formal_statistics", [python, "scripts/analyze_manuscript_statistics.py", "--results-root", "results", "--output-dir", "results/formal_statistics_revised"]),
+        ("main_tables", [python, "scripts/compile_main_manuscript_tables.py", "--data", zebrafish, "--mouse", mouse, "--human", "data/external/human_mi/zenodo_6578047/snatac/snATAC-seq-submission.h5ad", "--results-root", "results", "--output-dir", "manuscript/main_tables", "--resamples", "10000"]),
         ("manuscript_results", [python, "scripts/write_manuscript_results.py", "--results-root", "results", "--manuscript", "manuscript/manuscript_sections.md"]),
         ("figures", [python, "scripts/generate_manuscript_figures.py", "--data", zebrafish, "--results-root", "results", "--output-dir", "figures/manuscript"]),
         ("supplementary_tables", [python, "scripts/compile_supplementary_tables.py", "--data", zebrafish, "--results-root", "results", "--output-dir", "manuscript/supplementary_tables"]),
+        ("verification_tests", [python, "scripts/run_final_verification_tests.py", "--output-dir", "results/verification"]),
     ]
 
 
@@ -70,6 +73,12 @@ def main() -> None:
         json.dumps({"status": final_status, "completed": completed, "current_stage": None, "stages": names}, indent=2),
         encoding="utf-8",
     )
+    if final_status == "complete":
+        subprocess.run(
+            [python, "scripts/audit_manuscript_completion.py"],
+            check=True,
+            env=environment,
+        )
     print(json.dumps({"status": final_status, "completed": completed}, indent=2))
 
 

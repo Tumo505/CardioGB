@@ -8,7 +8,7 @@ warm_start_epochs: 5
 early_stopping_patience: 25
 mixed_precision: true
 amp_dtype: bfloat16
-cuda_memory_fraction: 0.97
+cuda_memory_fraction: 0.998
 cooldown_seconds: 0
 thermal_cooldown_every_epochs: 5
 thermal_cooldown_seconds: 0

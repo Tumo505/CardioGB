@@ -1,5 +1,5 @@
 version: atlas_curated_v1
-status: frozen_for_core_pilot_v1
+status: frozen_for_registered_experiments_v1
 scoring:
   method: mean_scaled
   output_scaling: robust_minmax
@@ -45,4 +45,4 @@ notes:
   - All listed genes were verified present in the observed 29,539-gene Spatial counts layer.
   - State scores are programme summaries, not estimates of cell abundance or causal activity.
   - Stage/domain QC and mean-scaled, rank-based, and module-score sensitivity comparisons are recorded in results/tables.
-  - atlas_curated_v1 is frozen for core pilot experiments; cross-species use still requires the versioned orthology table and species-specific expression QC.
+  - atlas_curated_v1 was frozen before the registered experiments; cross-species analyses use the versioned orthology table and species-specific expression QC.
