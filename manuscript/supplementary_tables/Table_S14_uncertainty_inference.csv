@@ -1,0 +1,19 @@
+protocol,analysis_level,test,x,y,spearman,ci_lower,ci_upper,p_value,n_rows,n_clusters,cluster_unit,p_adjust_bh
+mouse_zero_shot_adjacent,state_clustered,uncertainty_vs_error,ensemble_std,absolute_error,0.347781217750258,-0.21618743343982966,0.7486687965921194,0.040495950404959506,18,6,state,0.1041324438984673
+mouse_zero_shot_adjacent,transition_aggregated,uncertainty_vs_error,ensemble_std,absolute_error,1.0,1.0,1.0,0.32326767323267674,3,3,forecast transition,0.4698914723912224
+mouse_zero_shot_adjacent,state_clustered,uncertainty_vs_horizon,horizon_days,ensemble_std,0.4543108504242546,-0.045715032088249445,0.8241633836921342,0.003999600039996,18,6,state,0.022497750224977502
+mouse_zero_shot_adjacent,transition_aggregated,uncertainty_vs_horizon,horizon_days,ensemble_std,0.8660254037844387,0.8660254037844387,1.0,0.6561343865613438,3,3,forecast transition,0.7513123687631237
+mouse_zero_shot_adjacent,state_clustered,error_vs_horizon,horizon_days,absolute_error,0.49974193546668005,0.0,0.7845689617898779,0.0613938606139386,18,6,state,0.13813618638136185
+mouse_zero_shot_adjacent,transition_aggregated,error_vs_horizon,horizon_days,absolute_error,0.8660254037844387,0.8660254037844387,1.0,0.6678332166783322,3,3,forecast transition,0.7513123687631237
+mouse_zero_shot_direct_horizon,state_clustered,uncertainty_vs_error,ensemble_std,absolute_error,0.391124871001032,-0.005192107995846314,0.8107810781078109,0.0098990100989901,18,6,state,0.03563643635636436
+mouse_zero_shot_direct_horizon,transition_aggregated,uncertainty_vs_error,ensemble_std,absolute_error,1.0,1.0,1.0,0.33936606339366066,3,3,forecast transition,0.4698914723912224
+mouse_zero_shot_direct_horizon,state_clustered,uncertainty_vs_horizon,horizon_days,ensemble_std,0.45901886062936975,-0.05278717216432639,0.8393288053263033,0.004999500049995001,18,6,state,0.022497750224977502
+mouse_zero_shot_direct_horizon,transition_aggregated,uncertainty_vs_horizon,horizon_days,ensemble_std,1.0,1.0,1.0,0.33566643335666435,3,3,forecast transition,0.4698914723912224
+mouse_zero_shot_direct_horizon,state_clustered,error_vs_horizon,horizon_days,absolute_error,0.5508226327552437,0.14516472345189757,0.8313979615881407,0.014598540145985401,18,6,state,0.043795620437956206
+mouse_zero_shot_direct_horizon,transition_aggregated,error_vs_horizon,horizon_days,absolute_error,1.0,1.0,1.0,0.3340665933406659,3,3,forecast transition,0.4698914723912224
+zebrafish_internal_test,state_clustered,uncertainty_vs_error,ensemble_std,absolute_error,0.10104529616724739,-0.2851464265433601,0.4917926214854542,0.597940205979402,42,6,state,0.7513123687631237
+zebrafish_internal_test,transition_aggregated,uncertainty_vs_error,ensemble_std,absolute_error,0.03571428571428572,-0.8695652173913043,0.9999999999999999,0.9637036296370363,7,7,forecast transition,0.9637036296370363
+zebrafish_internal_test,state_clustered,uncertainty_vs_horizon,horizon_days,ensemble_std,0.8146473837495704,0.7225134724904131,0.9157834422065871,9.999000099990002e-05,42,6,state,0.0017998200179982003
+zebrafish_internal_test,transition_aggregated,uncertainty_vs_horizon,horizon_days,ensemble_std,0.9549937104572924,0.6604743864029398,1.0,0.0045995400459954,7,7,forecast transition,0.022497750224977502
+zebrafish_internal_test,state_clustered,error_vs_horizon,horizon_days,absolute_error,0.18830049016109288,-0.22528922837269744,0.5622306073706305,0.19718028197180282,42,6,state,0.39436056394360564
+zebrafish_internal_test,transition_aggregated,error_vs_horizon,horizon_days,absolute_error,0.09009374626955591,-0.8666666666666666,0.9701425001453319,0.861013898610139,7,7,forecast transition,0.9116617749989707

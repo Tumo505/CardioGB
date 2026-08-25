@@ -1,0 +1,4 @@
+dataset,species,modality,observations,biological_units,sections_or_samples,timepoints_or_groups,model_states,analysis_role
+Zebrafish regeneration atlas,Danio rerio,Stereo-seq,159293,24,105,8,6,training and internal validation
+Neonatal mouse repair series,Mus musculus,spatial transcriptomics,6150,4,4,4,6,frozen external validation
+Human myocardial infarction,Homo sapiens,snATAC-seq,46086,20,35,3,6,patient-level translational validation

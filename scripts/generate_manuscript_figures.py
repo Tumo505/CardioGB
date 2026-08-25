@@ -6,6 +6,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.lines import Line2D
 
 from cardiogb.data.state_dataset import StateDataset
 
@@ -55,22 +56,23 @@ def mean_ci(values: pd.Series) -> tuple[float, float]:
 
 
 def figure_1(output: Path) -> None:
-    figure, axis = plt.subplots(figsize=(11.5, 4.6))
+    figure, axis = plt.subplots(figsize=(13.0, 4.8))
     axis.set_axis_off()
     boxes = [
-        (0.02, "Spatial transcriptomics\n6 pathway states"),
-        (0.22, "Bounded mechanistic ODE\ninterpretable parameters"),
-        (0.43, "Scaled graph residual\nlocal missing dynamics"),
-        (0.64, "Projected RK4\nstable forecasts"),
-        (0.83, "Validation\nE1–E11"),
+        (0.02, "Spatial transcriptomics\nSix pathway states"),
+        (0.215, "Bounded mechanistic ODE\nInterpretable rates"),
+        (0.41, "Scaled graph residual\nLocal missing dynamics"),
+        (0.605, "Projected RK4\nStable forecasts"),
+        (0.80, "Registered validation\nE1–E11"),
     ]
+    box_width = 0.17
     for index, (x, label) in enumerate(boxes):
         color = "#E8F1FA" if index != 2 else "#FBEAEC"
-        axis.add_patch(plt.Rectangle((x, 0.38), 0.15, 0.25, facecolor=color, edgecolor="#243447", linewidth=1.5))
-        axis.text(x + 0.075, 0.505, label, ha="center", va="center", fontsize=9)
+        axis.add_patch(plt.Rectangle((x, 0.38), box_width, 0.25, facecolor=color, edgecolor="#243447", linewidth=1.5))
+        axis.text(x + box_width / 2, 0.505, label, ha="center", va="center", fontsize=8.5, linespacing=1.25)
         if index < len(boxes) - 1:
-            axis.annotate("", xy=(boxes[index + 1][0], 0.505), xytext=(x + 0.15, 0.505), arrowprops={"arrowstyle": "->", "lw": 1.5})
-    axis.text(0.33, 0.78, r"$\dot{x}=f_{mech}(x;\theta)+s\odot\tanh(f_{GNN}(x,G))$", ha="center", fontsize=14)
+            axis.annotate("", xy=(boxes[index + 1][0] - 0.004, 0.505), xytext=(x + box_width + 0.004, 0.505), arrowprops={"arrowstyle": "->", "lw": 1.5})
+    axis.text(0.50, 0.78, r"$\dot{x}=f_{mech}(x;\theta)+s\odot\tanh(f_{GNN}(x,G))$", ha="center", fontsize=14)
     axis.text(0.50, 0.16, "Grouped biological-unit splits  •  multi-seed inference  •  frozen zebrafish→mouse transfer  •  human-MI translation", ha="center", fontsize=9)
     axis.set_title("CardioGB study design and grey-box architecture", fontsize=13, pad=12)
     save(figure, output / "Figure_1_framework_overview.png")
@@ -219,13 +221,11 @@ def figure_5(dataset: StateDataset, root: Path, output: Path) -> None:
         axis.set_title(f"{stage:g} dpa | {frame['section'].iloc[0]}", fontsize=8)
         axis.set_xticks([])
         axis.set_yticks([])
-    figure.colorbar(image, ax=map_axes, fraction=0.015, pad=0.01, label="Mechanistic insufficiency")
-
     domain_unit = domains.groupby(["biological_unit", "stage_days", "domain"], observed=True)["mi"].mean().reset_index()
     domain_order = domain_unit.groupby("domain", observed=True)["biological_unit"].nunique().sort_values(ascending=False).head(10).index
     axes[1, 2].boxplot(
         [domain_unit.loc[domain_unit["domain"] == name, "mi"] for name in domain_order],
-        labels=domain_order,
+        tick_labels=domain_order,
         vert=False,
         showfliers=False,
     )
@@ -237,7 +237,9 @@ def figure_5(dataset: StateDataset, root: Path, output: Path) -> None:
     for axis in (axes[1, 2], axes[1, 3]):
         style(axis)
     figure.suptitle("Held-out spatial and tissue-domain mechanistic insufficiency")
-    figure.subplots_adjust(top=0.90, wspace=0.35, hspace=0.28)
+    figure.subplots_adjust(top=0.90, right=0.90, wspace=0.35, hspace=0.28)
+    color_axis = figure.add_axes([0.92, 0.54, 0.012, 0.30])
+    figure.colorbar(image, cax=color_axis, label="Mechanistic insufficiency")
     save(figure, output / "Figure_5_mechanistic_insufficiency_maps.png")
 
 def figure_6(root: Path, output: Path) -> None:
@@ -293,11 +295,11 @@ def figure_7(root: Path, output: Path) -> None:
     axes[0, 1].text(0.98, 0.03, f"BH-significant tests: {significant}/{len(tests)}", transform=axes[0, 1].transAxes, ha="right", fontsize=8)
     fold = e4.groupby(["case", "seed"], observed=True)["sliced_wasserstein"].mean().reset_index()
     fold_cases = sorted(fold["case"].unique())
-    axes[1, 0].boxplot([fold.loc[fold["case"] == case, "sliced_wasserstein"] for case in fold_cases], labels=[str(case) for case in fold_cases])
+    axes[1, 0].boxplot([fold.loc[fold["case"] == case, "sliced_wasserstein"] for case in fold_cases], tick_labels=[str(case) for case in fold_cases])
     axes[1, 0].set(xlabel="Held-out biological-replicate fold", ylabel="Sliced Wasserstein", title="C  E4 grouped cross-validation")
     e8_seed = e8.groupby(["ablation", "seed"], observed=True)["sliced_wasserstein"].mean().reset_index()
     order = e8_seed.groupby("ablation", observed=True)["sliced_wasserstein"].mean().sort_values().index
-    axes[1, 1].boxplot([e8_seed.loc[e8_seed["ablation"] == name, "sliced_wasserstein"] for name in order], labels=order, vert=False, showfliers=False)
+    axes[1, 1].boxplot([e8_seed.loc[e8_seed["ablation"] == name, "sliced_wasserstein"] for name in order], tick_labels=order, vert=False, showfliers=False)
     axes[1, 1].set(xlabel="Sliced Wasserstein", title="D  E8 component ablations")
     axes[1, 1].tick_params(axis="y", labelsize=6)
     for axis in axes.flat:
@@ -324,10 +326,16 @@ def figure_8(root: Path, output: Path) -> None:
         subset = matched[matched["species"] == species].sort_values("stage_days")
         phase = np.arange(1, len(subset) + 1)
         for color, state_name in zip(COLORS, STATE_LABELS):
-            axes[0, 1].plot(phase, subset[state_name], linestyle=linestyle, marker="o", color=color, alpha=0.85, label=f"{state_name} {species}" if species == "zebrafish" else None)
+            axes[0, 1].plot(phase, subset[state_name], linestyle=linestyle, marker="o", color=color, alpha=0.85, label=state_name if species == "zebrafish" else None)
     axes[0, 1].set_xticks([1, 2, 3, 4])
     axes[0, 1].set(xlabel="Matched repair phase", ylabel="Mean pathway score", title="B  Cross-species repair dynamics")
-    axes[0, 1].legend(frameon=False, fontsize=6, ncol=2)
+    pathway_legend = axes[0, 1].legend(frameon=False, fontsize=6, ncol=2, loc="upper right", title="Pathway", title_fontsize=7)
+    axes[0, 1].add_artist(pathway_legend)
+    species_handles = [
+        Line2D([0], [0], color="#455A64", linewidth=1.8, linestyle="-", label="Zebrafish"),
+        Line2D([0], [0], color="#455A64", linewidth=1.8, linestyle="--", label="Mouse"),
+    ]
+    axes[0, 1].legend(handles=species_handles, frameon=False, fontsize=7, loc="lower left", title="Species", title_fontsize=7)
     mouse = metrics[metrics["protocol"].str.startswith("mouse")].copy()
     positions = np.arange(len(mouse))
     axes[1, 0].plot(positions, mouse["sliced_wasserstein"], marker="o", label="CardioGB", color="#D1495B")
@@ -362,7 +370,7 @@ def supplementary_human(root: Path, output: Path) -> None:
     figure, axes = plt.subplots(2, 3, figsize=(12, 7.2), sharex=False)
     for axis, pathway, color in zip(axes.flat, pathways, COLORS):
         values = [patient.loc[patient["patient_group"].astype(str) == group, pathway] for group in groups]
-        axis.boxplot(values, labels=groups, showfliers=False)
+        axis.boxplot(values, tick_labels=groups, showfliers=False)
         for index, series in enumerate(values, start=1):
             axis.scatter(np.repeat(index, len(series)), series, s=13, alpha=0.65, color=color)
         significant = posthoc[(posthoc["pathway"] == pathway) & (posthoc["p_adjust_bh_global"] < 0.05)]

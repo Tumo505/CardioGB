@@ -1,0 +1,9 @@
+diagnostic,value
+effective_rank,24.0
+condition_number,149.96393445246838
+maximum_absolute_pair_correlation,0.9887251866170776
+parameters,27.0
+fits,25.0
+local_sensitivity_effective_rank,6.0
+maximum_absolute_local_sensitivity_profile_correlation,1.0000000000000002
+minimum_local_sensitivity_profile_norm,0.09987049582992791

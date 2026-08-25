@@ -48,3 +48,45 @@ workspace; pass `--skip-export` to preprocessing when repeating only Python-side
 conversion.
 
 Large source datasets are intentionally excluded from version control.
+
+
+## Registered experiment pipeline
+
+The complete manuscript experiment matrix is resumable and runs one
+memory-intensive training process at a time:
+
+```powershell
+$env:PYTHONPATH = "src"
+python scripts\run_revised_full_pipeline.py
+```
+
+To resume from a named stage without retraining completed models:
+
+```powershell
+python scripts\run_revised_full_pipeline.py --from-stage e8_ablations
+```
+
+The registered pipeline executes E1, E2, E3, validation-only E3 horizon
+calibration, E4, E5/E6, the nine-condition E8 matrix, a five-member ensemble,
+mouse pathway conservation and frozen zero-shot prediction, uncertainty
+inference, E7 interpretation and identifiability, patient-level human snATAC
+translation, formal statistics, main Tables 1–6, manuscript Results and
+Discussion, Figures 1–8, supplementary tables, and the CPU-isolated test
+suite. Completion markers and checkpoints permit interruption and resumption.
+
+The `no_mechanism` E8 condition sets only the mechanistic vector field to zero.
+It retains the same bounded graph residual and state projection as CardioGB and
+omits the otherwise inapplicable mechanistic warm start. This avoids confounding
+mechanism removal with removal of numerical and biological safeguards.
+
+After the pipeline manifest reports `complete`, run the evidence-based final
+gate:
+
+```powershell
+python scripts\audit_manuscript_completion.py
+```
+
+The audit writes CSV, JSON, and Markdown reports under
+`results\completion_audit` and exits non-zero until every registered dataset,
+model, experiment, inferential analysis, manuscript artifact, and verification
+test has authoritative completion evidence.

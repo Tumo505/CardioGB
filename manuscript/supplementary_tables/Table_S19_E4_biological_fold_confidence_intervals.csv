@@ -1,0 +1,4 @@
+protocol,metric,estimate,ci_lower,ci_upper,n_biological_folds,resampling_unit
+E4,mmd,0.05607040944908342,0.043689178010182676,0.07982709288064918,3,held-out biological replicate; seeds averaged within fold
+E4,moment_error,0.015234246332519857,0.011261915798032878,0.022681961042274257,3,held-out biological replicate; seeds averaged within fold
+E4,sliced_wasserstein,0.017740266821125384,0.013883656023868443,0.02535560240836011,3,held-out biological replicate; seeds averaged within fold

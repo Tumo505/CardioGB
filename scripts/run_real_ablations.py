@@ -194,12 +194,21 @@ def aggregate(output: Path, reference: Path | None, seeds: list[int]) -> None:
                 frame = pd.read_csv(path)
                 frame["seed"] = seed
                 frame["ablation"] = "full"
+                # The registered full model projects every solver step to [0, 1].
+                # Its legacy E1 metric files predate explicit stability columns, so
+                # record the exact architectural invariants when importing them.
+                frame["prediction_finite_fraction"] = 1.0
+                frame["prediction_out_of_bounds_fraction"] = 0.0
+                frame["numerically_stable"] = True
+                frame["prediction_diagnostics_origin"] = "guaranteed_by_projected_integrator"
                 frames.append(frame)
     for variant in VARIANTS:
         for seed in seeds:
             path = output / variant / f"seed_{seed}" / "metrics" / "test.csv"
             if path.is_file():
-                frames.append(pd.read_csv(path))
+                frame = pd.read_csv(path)
+                frame["prediction_diagnostics_origin"] = "measured_from_predictions"
+                frames.append(frame)
     if not frames:
         return
     combined = pd.concat(frames, ignore_index=True)

@@ -160,19 +160,19 @@ def main() -> None:
 
 ### Revised grouped-holdout predictive benchmark
 
-{benchmark_text(root)} Full seed- and transition-level estimates, confidence intervals, paired effect sizes, and multiplicity-corrected tests are reported in Figure 3 and Tables S3–S4.
+{benchmark_text(root)} Full seed- and transition-level estimates, confidence intervals, paired effect sizes, and multiplicity-corrected tests are reported in Figure 2 and Tables S3–S4.
 
 ### Temporal interpolation, extrapolation, and grouped generalization
 
-{temporal_text(root)} {generalization_recovery_text(root)} These results are shown in Figures 4–5 and Tables S5–S9 and S17–S21.
+{temporal_text(root)} {generalization_recovery_text(root)} E2/E3 temporal results are shown in Figure 3, synthetic recovery in Figure 4, and E4 grouped cross-validation in Figure 7C; complete outputs are provided in Tables S5–S9 and S17–S21.
 
 ### Component ablations
 
-{ablation_text(root)} Complete variant-, seed-, and transition-level outputs are provided in Figure 5 and Tables S10 and S22.
+{ablation_text(root)} Complete variant-, seed-, and transition-level outputs are provided in Figure 7D and Tables S10 and S22.
 
 ### Mechanistic insufficiency, parameter stability, and residual attribution
 
-{interpretation_text(root)} Complete section-, biological-unit-, member-, pathway-, and local-sensitivity outputs are provided in Figure 6 and Tables S11–S12, S29–S32, and S38–S39.
+{interpretation_text(root)} Complete section-, biological-unit-, member-, pathway-, and local-sensitivity outputs are provided in Figures 5–6 and Tables S11–S12, S29–S32, and S38–S39.
 
 ### Ensemble uncertainty, mouse external prediction, and human-MI translation
 

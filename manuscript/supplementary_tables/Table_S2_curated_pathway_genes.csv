@@ -1,0 +1,89 @@
+state,pathway,gene,description,expected_peak,pathway_version
+I,inflammation,tnfa,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,il1b,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,cxcl8a,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,marco,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,grnas,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,mpeg1.1,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,lsp1b,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,cd74a,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,cd9b,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,grn1,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,grn2,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,mpx,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,lyz,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,fcer1gl,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,c1qa,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,c1qb,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+I,inflammation,c1qc,Injury-associated innate immune and inflammatory activity.,"early, approximately 12 hpa to 1 dpa",atlas_curated_v1
+A,activation,aldh1a2,"Early endocardial, epicardial, and organ-wide injury activation.","approximately 6 hpa to 1 dpa, with epicardial activation near 3 dpa",atlas_curated_v1
+A,activation,cd151,"Early endocardial, epicardial, and organ-wide injury activation.","approximately 6 hpa to 1 dpa, with epicardial activation near 3 dpa",atlas_curated_v1
+A,activation,ackr3b,"Early endocardial, epicardial, and organ-wide injury activation.","approximately 6 hpa to 1 dpa, with epicardial activation near 3 dpa",atlas_curated_v1
+A,activation,inhbaa,"Early endocardial, epicardial, and organ-wide injury activation.","approximately 6 hpa to 1 dpa, with epicardial activation near 3 dpa",atlas_curated_v1
+A,activation,sema3aa,"Early endocardial, epicardial, and organ-wide injury activation.","approximately 6 hpa to 1 dpa, with epicardial activation near 3 dpa",atlas_curated_v1
+A,activation,tnfrsf11b,"Early endocardial, epicardial, and organ-wide injury activation.","approximately 6 hpa to 1 dpa, with epicardial activation near 3 dpa",atlas_curated_v1
+A,activation,hspb6,"Early endocardial, epicardial, and organ-wide injury activation.","approximately 6 hpa to 1 dpa, with epicardial activation near 3 dpa",atlas_curated_v1
+A,activation,hspb11,"Early endocardial, epicardial, and organ-wide injury activation.","approximately 6 hpa to 1 dpa, with epicardial activation near 3 dpa",atlas_curated_v1
+A,activation,cd63,"Early endocardial, epicardial, and organ-wide injury activation.","approximately 6 hpa to 1 dpa, with epicardial activation near 3 dpa",atlas_curated_v1
+A,activation,hif1ab,"Early endocardial, epicardial, and organ-wide injury activation.","approximately 6 hpa to 1 dpa, with epicardial activation near 3 dpa",atlas_curated_v1
+A,activation,tcf21,"Early endocardial, epicardial, and organ-wide injury activation.","approximately 6 hpa to 1 dpa, with epicardial activation near 3 dpa",atlas_curated_v1
+A,activation,wt1b,"Early endocardial, epicardial, and organ-wide injury activation.","approximately 6 hpa to 1 dpa, with epicardial activation near 3 dpa",atlas_curated_v1
+F,fibroblast_ecm,col12a1a,Pro-regenerative fibroblast and extracellular-matrix remodelling.,approximately 3 to 7 dpa,atlas_curated_v1
+F,fibroblast_ecm,col12a1b,Pro-regenerative fibroblast and extracellular-matrix remodelling.,approximately 3 to 7 dpa,atlas_curated_v1
+F,fibroblast_ecm,lum,Pro-regenerative fibroblast and extracellular-matrix remodelling.,approximately 3 to 7 dpa,atlas_curated_v1
+F,fibroblast_ecm,fn1b,Pro-regenerative fibroblast and extracellular-matrix remodelling.,approximately 3 to 7 dpa,atlas_curated_v1
+F,fibroblast_ecm,fn1a,Pro-regenerative fibroblast and extracellular-matrix remodelling.,approximately 3 to 7 dpa,atlas_curated_v1
+F,fibroblast_ecm,col1a1a,Pro-regenerative fibroblast and extracellular-matrix remodelling.,approximately 3 to 7 dpa,atlas_curated_v1
+F,fibroblast_ecm,col1a2,Pro-regenerative fibroblast and extracellular-matrix remodelling.,approximately 3 to 7 dpa,atlas_curated_v1
+F,fibroblast_ecm,mfap5,Pro-regenerative fibroblast and extracellular-matrix remodelling.,approximately 3 to 7 dpa,atlas_curated_v1
+F,fibroblast_ecm,dcn,Pro-regenerative fibroblast and extracellular-matrix remodelling.,approximately 3 to 7 dpa,atlas_curated_v1
+F,fibroblast_ecm,mmp2,Pro-regenerative fibroblast and extracellular-matrix remodelling.,approximately 3 to 7 dpa,atlas_curated_v1
+F,fibroblast_ecm,fibinb,Pro-regenerative fibroblast and extracellular-matrix remodelling.,approximately 3 to 7 dpa,atlas_curated_v1
+F,fibroblast_ecm,postnb,Pro-regenerative fibroblast and extracellular-matrix remodelling.,approximately 3 to 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,pcna,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,cdk1,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,ccng1,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,ccng2,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,mustn1b,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,hand2,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,nkx2.5,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,acta1b,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,ccn1,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,spry4,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,csrp3,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,tpm4a,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,mef2cb,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,cacybp,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,desma,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,tbx20,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,nppa,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+C,cardiomyocyte_regeneration,nppb,"Cardiomyocyte dedifferentiation, cell-cycle entry, proliferation, and early repair.",dedifferentiation from 12 hpa and proliferation near 7 dpa,atlas_curated_v1
+V,vascularisation,kdrl,"Endothelial, coronary revascularisation, and vascular scaffold activity.",increasing during tissue replacement and late vascular restoration,atlas_curated_v1
+V,vascularisation,kdr,"Endothelial, coronary revascularisation, and vascular scaffold activity.",increasing during tissue replacement and late vascular restoration,atlas_curated_v1
+V,vascularisation,flt1,"Endothelial, coronary revascularisation, and vascular scaffold activity.",increasing during tissue replacement and late vascular restoration,atlas_curated_v1
+V,vascularisation,pecam1,"Endothelial, coronary revascularisation, and vascular scaffold activity.",increasing during tissue replacement and late vascular restoration,atlas_curated_v1
+V,vascularisation,cdh5,"Endothelial, coronary revascularisation, and vascular scaffold activity.",increasing during tissue replacement and late vascular restoration,atlas_curated_v1
+V,vascularisation,fli1a,"Endothelial, coronary revascularisation, and vascular scaffold activity.",increasing during tissue replacement and late vascular restoration,atlas_curated_v1
+V,vascularisation,etv2,"Endothelial, coronary revascularisation, and vascular scaffold activity.",increasing during tissue replacement and late vascular restoration,atlas_curated_v1
+V,vascularisation,plvapa,"Endothelial, coronary revascularisation, and vascular scaffold activity.",increasing during tissue replacement and late vascular restoration,atlas_curated_v1
+V,vascularisation,plvapb,"Endothelial, coronary revascularisation, and vascular scaffold activity.",increasing during tissue replacement and late vascular restoration,atlas_curated_v1
+V,vascularisation,vwf,"Endothelial, coronary revascularisation, and vascular scaffold activity.",increasing during tissue replacement and late vascular restoration,atlas_curated_v1
+V,vascularisation,cxcl12b,"Endothelial, coronary revascularisation, and vascular scaffold activity.",increasing during tissue replacement and late vascular restoration,atlas_curated_v1
+V,vascularisation,tagln,"Endothelial, coronary revascularisation, and vascular scaffold activity.",increasing during tissue replacement and late vascular restoration,atlas_curated_v1
+M,mature_myocardium,myl7,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,myh7,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,myh6,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,tnnt2a,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,tnni4a,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,cmlc1,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,ttn.1,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,ttn.2,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,actc1b,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,tcap,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,tnnc1b,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,atp2a2a,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,slc8a1a,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,ryr2b,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,cox6a2,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,cox5b2,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1
+M,mature_myocardium,cox4i1l,"Contractile myocardium, oxidative metabolism, and calcium handling.",uninjured myocardium and re-differentiation near 14 to 28 dpa,atlas_curated_v1

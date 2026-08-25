@@ -68,14 +68,14 @@ def main() -> None:
             json.dumps({"status": "partial", "completed": completed, "current_stage": None, "stages": names}, indent=2),
             encoding="utf-8",
         )
-    final_status = "complete" if end == len(matrix) else "partial"
+    final_status = "complete" if set(names).issubset(set(completed)) else "partial"
     args.manifest.write_text(
         json.dumps({"status": final_status, "completed": completed, "current_stage": None, "stages": names}, indent=2),
         encoding="utf-8",
     )
     if final_status == "complete":
         subprocess.run(
-            [python, "scripts/audit_manuscript_completion.py"],
+            [sys.executable, "scripts/audit_manuscript_completion.py"],
             check=True,
             env=environment,
         )

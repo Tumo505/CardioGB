@@ -1,0 +1,5 @@
+method,validation_group_cv_mse,selected
+median,0.015410479385550515,True
+trimmed_mean,0.015488166536418164,False
+simplex,0.016294968812902388,False
+equal_mean,0.01571986408665919,False

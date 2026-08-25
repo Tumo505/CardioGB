@@ -138,7 +138,11 @@ def main() -> None:
     add("Outputs", "Complete manuscript sections and figure legends", not missing_headings and "AUTO_RESULTS_START" in manuscript_text and "AUTO_RESULTS_END" in manuscript_text, str(args.manuscript), f"missing_headings={missing_headings}, characters={len(manuscript_text)}")
 
     pipeline = read_json(root / "final_pipeline_manifest.json")
-    add("Reproducibility", "Complete registered pipeline manifest", pipeline.get("status") == "complete", str(root / "final_pipeline_manifest.json"), f"status={pipeline.get('status')}, completed={len(pipeline.get('completed', []))}")
+    pipeline_stages = set(pipeline.get("stages", []))
+    pipeline_completed = set(pipeline.get("completed", []))
+    pipeline_missing = sorted(pipeline_stages - pipeline_completed)
+    pipeline_ok = pipeline.get("status") == "complete" and bool(pipeline_stages) and not pipeline_missing
+    add("Reproducibility", "Complete registered pipeline manifest", pipeline_ok, str(root / "final_pipeline_manifest.json"), f"status={pipeline.get('status')}, completed={len(pipeline_completed)}/{len(pipeline_stages)}, missing={pipeline_missing}")
     test_manifest = read_json(root / "verification" / "test_manifest.json")
     add("Reproducibility", "Full automated test suite passes after final artifact generation", test_manifest.get("status") == "complete" and int(test_manifest.get("passed", 0)) >= 54 and int(test_manifest.get("failed", 1)) == 0, str(root / "verification" / "test_manifest.json"), f"status={test_manifest.get('status')}, passed={test_manifest.get('passed')}, failed={test_manifest.get('failed')}")
 
