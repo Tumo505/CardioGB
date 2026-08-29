@@ -45,6 +45,7 @@ class MechanisticODE(nn.Module):
         activation_state: str = "A",
         injury_parameter: str = "alpha_A",
         injury_decay: float = 2.0,
+        parameter_max: float | None = None,
     ) -> None:
         super().__init__()
         self.state_names = tuple(state_names)
@@ -59,10 +60,17 @@ class MechanisticODE(nn.Module):
         self.activation_index = self.state_index[activation_state]
         self.injury_parameter = injury_parameter
         self.injury_decay = float(injury_decay)
+        if parameter_max is not None and parameter_max <= 0:
+            raise ValueError("parameter_max must be positive")
+        self.parameter_max = None if parameter_max is None else float(parameter_max)
 
         raw = {}
         for name, initial in parameter_initials.items():
-            if parameter_transform == "softplus":
+            if self.parameter_max is not None:
+                if not 0 < initial < self.parameter_max:
+                    raise ValueError("parameter initials must lie within (0, parameter_max)")
+                value = float(torch.logit(torch.tensor(float(initial) / self.parameter_max)))
+            elif parameter_transform == "softplus":
                 value = inverse_softplus(float(initial))
             elif parameter_transform == "exp":
                 if initial <= 0:
@@ -114,9 +122,12 @@ class MechanisticODE(nn.Module):
             parameter_transform=config.get("parameter_transform", "softplus"),
             injury_parameter=injury_parameter,
             injury_decay=float(injury.get("decay", 2.0)),
+            parameter_max=config.get("parameter_max"),
         )
 
     def constrained_parameter(self, name: str) -> Tensor:
+        if self.parameter_max is not None:
+            return self.parameter_max * torch.sigmoid(self.raw_parameters[name])
         return positive(self.raw_parameters[name], self.parameter_transform)
 
     def constrained_parameters(self) -> dict[str, Tensor]:

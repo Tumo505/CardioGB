@@ -17,6 +17,24 @@ from cardiogb.training.trainer import (
 )
 from cardiogb.losses.objective import LossWeights
 from cardiogb.utils.seed import seed_everything
+def bootstrap_transition_groups(
+    transitions: Sequence[CrossSectionalTransition], seed: int
+) -> list[CrossSectionalTransition]:
+    """Bootstrap complete transition/patch groups without splitting their patches."""
+    grouped: dict[str, list[CrossSectionalTransition]] = {}
+    for transition in transitions:
+        grouped.setdefault(transition.evaluation_group or transition.name, []).append(transition)
+    keys = sorted(grouped)
+    if len(keys) < 2:
+        return list(transitions)
+    generator = torch.Generator().manual_seed(seed)
+    sampled = torch.randint(len(keys), (len(keys),), generator=generator).tolist()
+    result = []
+    for index in sampled:
+        result.extend(grouped[keys[index]])
+    return result
+
+
 
 
 def train_deep_ensemble(
@@ -30,6 +48,7 @@ def train_deep_ensemble(
     loss_weights: LossWeights = LossWeights(),
     seed: int = 0,
     checkpoint_directory: str | Path | None = None,
+    bootstrap_groups: bool = True,
 ) -> tuple[list[nn.Module], list[list[dict[str, float]]]]:
     """Train independently initialized members with recorded member seeds."""
     if members < 2:
@@ -38,13 +57,17 @@ def train_deep_ensemble(
     for member in range(members):
         seed_everything(seed + member)
         model = model_factory()
+        member_train = (
+            bootstrap_transition_groups(train, seed + member)
+            if bootstrap_groups else list(train)
+        )
         trainer = CrossSectionalTrainer(
             model, device=device, config=trainer_config, loss_weights=loss_weights
         )
         checkpoint = None
         if checkpoint_directory is not None:
             checkpoint = Path(checkpoint_directory) / f"member_{member:02d}.pt"
-        histories.append(trainer.fit(train, validation, checkpoint_path=checkpoint))
+        histories.append(trainer.fit(member_train, validation, checkpoint_path=checkpoint))
         models.append(trainer.model)
     return models, histories
 

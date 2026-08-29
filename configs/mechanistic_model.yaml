@@ -1,5 +1,6 @@
 states: [I, A, F, C, V, M]
 parameter_transform: softplus
+parameter_max: 2.0
 injury_input:
   type: exponential_decay
   parameter: alpha_A
@@ -9,11 +10,8 @@ interactions:
   - {source: A, target: I, parameter: alpha_I, sign: 1, initial: 0.2}
   - {source: I, target: F, parameter: alpha_F, sign: 1, initial: 0.2}
   - {source: I, target: C, parameter: alpha_C, sign: 1, initial: 0.2}
-  - {source: F, target: C, parameter: gamma_C, sign: 1, initial: 0.1}
   - {source: C, target: V, parameter: alpha_V, sign: 1, initial: 0.2}
-  - {source: F, target: V, parameter: gamma_V, sign: 1, initial: 0.1}
   - {source: V, target: M, parameter: alpha_M, sign: 1, initial: 0.2}
-  - {source: C, target: M, parameter: gamma_M, sign: 1, initial: 0.1}
 decay:
   I: {parameter: beta_I, initial: 0.2}
   A: {parameter: beta_A, initial: 0.5}

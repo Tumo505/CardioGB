@@ -29,6 +29,7 @@ def trainer_for(seed: int, epochs: int, gradient_checkpoint_interval: int = 2):
     seed_everything(seed)
     model_config = load_yaml("configs/model.yaml")
     train_config = load_yaml("configs/train.yaml")
+    multi_horizon = train_config.get("multi_horizon", {})
     model = build_model("cardiogb", model_config, load_yaml("configs/mechanistic_model.yaml"))
     device = resolve_device(train_config.get("device", "auto")).selected
     if device == "cuda":
@@ -58,7 +59,10 @@ def trainer_for(seed: int, epochs: int, gradient_checkpoint_interval: int = 2):
         ),
         warm_start_epochs=int(train_config.get("warm_start_epochs", 0)),
         gradient_checkpointing=bool(train_config.get("gradient_checkpointing", True)),
-        gradient_checkpoint_interval=gradient_checkpoint_interval,
+        gradient_checkpoint_interval=int(train_config.get("gradient_checkpoint_interval", gradient_checkpoint_interval)),
+        multi_horizon_curriculum_epochs=int(multi_horizon.get("curriculum_epochs", 0)),
+        stability_velocity_target=float(multi_horizon.get("stability_velocity_target", 0.4)),
+        regret_margin=float(multi_horizon.get("regret_margin", 0.0)),
         ),
         loss_weights=LossWeights(
             distribution=float(train_config["loss"]["lambda_distribution"]),
@@ -67,6 +71,9 @@ def trainer_for(seed: int, epochs: int, gradient_checkpoint_interval: int = 2):
             spatial=float(train_config["loss"]["lambda_spatial"]),
             biology=float(train_config["loss"]["lambda_biology"]),
             residual=float(train_config["loss"]["lambda_residual"]),
+            persistence_regret=float(train_config["loss"].get("lambda_persistence_regret", 0.0)),
+            stability=float(train_config["loss"].get("lambda_stability", 0.0)),
+            semigroup=float(train_config["loss"].get("lambda_semigroup", 0.0)),
         ),
     )
     return trainer, model_config, train_config, device
@@ -83,7 +90,7 @@ def build_case(dataset: StateDataset, protocol: str, case: float | int, *, k: in
     times = np.unique(dataset.times)
     if protocol == "e2_interpolation":
         masks = interpolation_masks(dataset, float(case))
-        train = dataset.transitions(mask=masks["train"], k=k, max_nodes=max_nodes)
+        train = dataset.transitions(mask=masks["train"], k=k, max_nodes=max_nodes, adjacent_only=False)
         validation_time = float(np.unique(dataset.times[masks["validation"]])[0])
         train_times = np.unique(dataset.times[masks["train"]])
         validation_prior = float(np.max(train_times[train_times < validation_time]))
@@ -108,7 +115,7 @@ def build_case(dataset: StateDataset, protocol: str, case: float | int, *, k: in
         validation_replicate = 2
         fitting_mask = train_mask & np.asarray([replicate_number(x) != validation_replicate for x in dataset.groups])
         validation_mask = train_mask & np.asarray([replicate_number(x) == validation_replicate for x in dataset.groups])
-        train = dataset.transitions(mask=fitting_mask, k=k, max_nodes=max_nodes)
+        train = dataset.transitions(mask=fitting_mask, k=k, max_nodes=max_nodes, adjacent_only=False)
         validation = dataset.transitions(mask=validation_mask, k=k, max_nodes=max_nodes)
         test = []
         for future in times[times > cutoff]:
@@ -135,7 +142,7 @@ def build_case(dataset: StateDataset, protocol: str, case: float | int, *, k: in
             "experimental_unit": "biological replicate (C1/C2/C3) within every stage",
         }
         return (
-            dataset.transitions(mask=train_mask, k=k, max_nodes=max_nodes),
+            dataset.transitions(mask=train_mask, k=k, max_nodes=max_nodes, adjacent_only=False),
             dataset.transitions(mask=validation_mask, k=k, max_nodes=max_nodes),
             dataset.transitions(mask=test_mask, k=k, max_nodes=max_nodes),
             split,
@@ -157,7 +164,11 @@ def run_one(dataset, data_path: Path, protocol: str, case, seed: int, epochs: in
     checkpoint = output / "checkpoints" / "cardiogb.pt"
     if device == "cuda":
         torch.cuda.reset_peak_memory_stats()
-    history = trainer.fit(train, validation, checkpoint_path=checkpoint)
+    start_epoch, initial_best = (trainer.resume_from_checkpoint(checkpoint) if checkpoint.is_file() else (0, float("inf")))
+    history = trainer.fit(
+        train, validation, checkpoint_path=checkpoint,
+        start_epoch=start_epoch, initial_best=initial_best,
+    )
     export_table(pd.DataFrame(history), output / "metrics" / "history.csv")
     ode = model_config["ode"]
     metrics = evaluate_transitions(

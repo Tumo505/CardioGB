@@ -39,6 +39,7 @@ def main() -> None:
     model_config = load_yaml("configs/model.yaml")
     mech_config = load_yaml("configs/mechanistic_model.yaml")
     train_config = load_yaml("configs/train.yaml")
+    multi_horizon = train_config.get("multi_horizon", {})
     metadata = pd.DataFrame({"group": dataset.groups, "stage": dataset.times.astype(str)})
     seed = int(train_config["seed"] if args.seed is None else args.seed)
     train_mask, validation_mask, test_mask, split = grouped_split(
@@ -74,6 +75,10 @@ def main() -> None:
         ),
         warm_start_epochs=int(train_config.get("warm_start_epochs", 0)),
         gradient_checkpointing=bool(train_config.get("gradient_checkpointing", True)),
+        gradient_checkpoint_interval=int(train_config.get("gradient_checkpoint_interval", 1)),
+        multi_horizon_curriculum_epochs=int(multi_horizon.get("curriculum_epochs", 0)),
+        stability_velocity_target=float(multi_horizon.get("stability_velocity_target", 0.4)),
+        regret_margin=float(multi_horizon.get("regret_margin", 0.0)),
     )
     weights = LossWeights(
         distribution=float(train_config["loss"]["lambda_distribution"]),
@@ -82,6 +87,9 @@ def main() -> None:
         spatial=float(train_config["loss"]["lambda_spatial"]),
         biology=float(train_config["loss"]["lambda_biology"]),
         residual=float(train_config["loss"]["lambda_residual"]),
+        persistence_regret=float(train_config["loss"].get("lambda_persistence_regret", 0.0)),
+        stability=float(train_config["loss"].get("lambda_stability", 0.0)),
+        semigroup=float(train_config["loss"].get("lambda_semigroup", 0.0)),
     )
     device = resolve_device(train_config.get("device", "auto")).selected
     if device == "cuda":
@@ -91,7 +99,7 @@ def main() -> None:
     max_nodes = int(train_config["batching"]["max_nodes"])
     cooldown = int(train_config.get("cooldown_seconds", 20))
     train = dataset.transitions(
-        mask=train_mask, k=int(model_config["graph"]["k"]), max_nodes=max_nodes
+        mask=train_mask, k=int(model_config["graph"]["k"]), max_nodes=max_nodes, adjacent_only=False
     )
     validation = dataset.transitions(
         mask=validation_mask, k=int(model_config["graph"]["k"]), max_nodes=max_nodes
@@ -119,7 +127,15 @@ def main() -> None:
             trainer = CrossSectionalTrainer(
                 model, device=device, config=trainer_config, loss_weights=weights
             )
-            history = trainer.fit(train, validation, checkpoint_path=checkpoint)
+            start_epoch, initial_best = (
+                trainer.resume_from_checkpoint(checkpoint)
+                if checkpoint.is_file()
+                else (0, float("inf"))
+            )
+            history = trainer.fit(
+                train, validation, checkpoint_path=checkpoint,
+                start_epoch=start_epoch, initial_best=initial_best,
+            )
             model = trainer.model
             newly_trained += 1
             member_history = pd.DataFrame(

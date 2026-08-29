@@ -18,7 +18,7 @@ def stages() -> list[tuple[str, list[str]]]:
     zebrafish = "data/processed/zebrafish_states.npz"
     mouse = "data/processed/mouse_visium_states.npz"
     return [
-        ("e1_benchmark", [python, "scripts/run_multiseed_benchmark.py", "--data", zebrafish, "--output-dir", "results/final_full_multiseed", "--epochs", "200", "--seeds", *SEEDS_10, "--max-new-models", "0"]),
+        ("e1_benchmark", [python, "scripts/run_parallel_multiseed_benchmark.py", "--data", zebrafish, "--output-dir", "results/final_full_multiseed", "--epochs", "200", "--seeds", *SEEDS_10, "--workers", "2", "--patch-batch-size", "8", "--memory-fraction-per-worker", "0.48"]),
         ("e5_e6_synthetic", [python, "scripts/run_synthetic_matrix.py", "--output-dir", "results/synthetic_recovery_full", "--epochs", "300", "--seeds", *SYNTHETIC_SEEDS_5, "--noise", "0", "0.01", "0.05", "0.1"]),
         ("e2_interpolation", [python, "scripts/run_manuscript_training.py", "--data", zebrafish, "--protocol", "e2_interpolation", "--output-dir", "results/e2_interpolation_revised", "--epochs", "200", "--seeds", *FINAL_REAL_SEEDS_5]),
         ("e3_extrapolation", [python, "scripts/run_manuscript_training.py", "--data", zebrafish, "--protocol", "e3_extrapolation", "--output-dir", "results/e3_extrapolation_revised", "--epochs", "200", "--seeds", *FINAL_REAL_SEEDS_5]),
@@ -26,8 +26,11 @@ def stages() -> list[tuple[str, list[str]]]:
         ("e4_group_cv", [python, "scripts/run_manuscript_training.py", "--data", zebrafish, "--protocol", "e4_group_cv", "--output-dir", "results/e4_group_cv_full", "--epochs", "200", "--seeds", *FINAL_REAL_SEEDS_5]),
         ("e8_ablations", [python, "scripts/run_real_ablations.py", "--data", zebrafish, "--rank-data", "data/processed/zebrafish_states_rank_mean.npz", "--output-dir", "results/final_full_ablations", "--reference-dir", "results/final_full_multiseed", "--epochs", "200", "--seeds", *FINAL_REAL_SEEDS_5, "--max-new-models", "0"]),
         ("e9_ensemble", [python, "scripts/train_ensemble.py", "--data", zebrafish, "--output-dir", "results/final_full_ensemble", "--members", "5", "--epochs", "200", "--seed", "20260825", "--max-new-members", "0"]),
+        ("e10_species_adapter", [python, "scripts/run_species_adapter_validation.py", "--mouse", mouse, "--checkpoints", "results/final_full_ensemble/checkpoints", "--output-dir", "results/mouse_species_adapter_revised", "--epochs", "100"]),
         ("e10_conservation", [python, "scripts/validate_mouse_conservation.py", "--zebrafish", zebrafish, "--mouse", mouse, "--output-dir", "results/mouse_validation_revised"]),
-        ("e10_external_prediction", [python, "scripts/evaluate_external_prediction.py", "--zebrafish", zebrafish, "--mouse", mouse, "--checkpoints", "results/final_full_ensemble/checkpoints", "--output-dir", "results/external_predictive_validation_revised"]),
+        ("added_validation_states", [python, "scripts/build_added_validation_state_datasets.py"]),
+        ("added_perturbations", [python, "scripts/analyze_added_perturbations.py"]),
+        ("e10_external_prediction", [python, "scripts/evaluate_external_prediction.py", "--zebrafish", zebrafish, "--mouse", mouse, "--checkpoints", "results/final_full_ensemble/checkpoints", "--additional", "GSE106884=data/processed/zebrafish/validation/gse106884_states.npz", "GSE237276=data/processed/zebrafish/validation/gse237276_states.npz", "GSE206787=data/processed/mouse/validation/gse206787_states.npz", "--output-dir", "results/external_predictive_validation_revised"]),
         ("e9_uncertainty_inference", [python, "scripts/analyze_uncertainty_inference.py", "--state-predictions", "results/external_predictive_validation_revised/tables/state_mean_predictions.csv", "--output-dir", "results/external_predictive_validation_revised/tables", "--resamples", "10000"]),
         ("e7_interpretation", [python, "scripts/run_full_interpretation.py", "--data", zebrafish, "--checkpoint-root", "results/final_full_multiseed", "--output-dir", "results/e7_full_interpretation", "--ig-steps", "8", "--k", "8"]),
         ("human_snatac", [python, "scripts/validate_human_snatac.py", "--data", "data/external/human_mi/zenodo_6578047/snatac/snATAC-seq-submission.h5ad", "--output-dir", "results/human_snatac_validation_revised", "--batch-size", "4096"]),

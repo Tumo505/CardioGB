@@ -11,15 +11,26 @@ gnn:
   layers: 2
   hidden_dim: 64
   dropout: 0.1
+  state_dependent_edge_gate: true
 ode:
   solver: rk4
   step_size: 0.25
 residual:
-  scale_max: 1.0
-  scale_initial: 0.1
+  scale_max: 0.25
+  scale_initial: 0.05
+  orthogonal: true
+  orthogonal_strength: 1.0
+  spectral_normalization: true
 mechanistic_gate:
   minimum: 0.05
   initial: 0.5
+  learned: false
+persistence_gate:
+  enabled: true
+  initial: 0.95
+  horizon_slope_initial: 0.05
+stability:
+  velocity_limit: 0.5
 constraints:
   state_min: 0.0
   state_max: 1.0

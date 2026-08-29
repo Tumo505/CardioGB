@@ -54,7 +54,7 @@ The exact versioned lists and machine-readable provenance live in
 
 Scores measure transcriptional programme activity in multi-cell Stereo-seq
 spots. They are not direct cell counts, causal pathway activities, or tracked
-cell trajectories. `atlas_curated_v1` is frozen for the core zebrafish pilot
+cell trajectories. `atlas_curated_v1` is frozen before the registered zebrafish experiments
 after domain-level QC, alternative-scoring sensitivity analysis, and orthology
 coverage were recorded. It must not be altered in response to benchmark
 outcomes. Any later revision is a new version and requires the same validation

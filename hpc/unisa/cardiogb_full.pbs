@@ -1,0 +1,37 @@
+#!/bin/bash
+#PBS -N cardiogb_full
+#PBS -q nvidia
+#PBS -l software=unisa
+#PBS -l select=1:ncpus=28:mem=500gb
+#PBS -l place=excl
+#PBS -l walltime=168:00:00
+#PBS -o logs/cardiogb_full.out
+#PBS -e logs/cardiogb_full.err
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+
+if [ -f "$HOME/miniforge3/etc/profile.d/conda.sh" ]; then
+  . "$HOME/miniforge3/etc/profile.d/conda.sh"
+elif [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
+  . "$HOME/miniconda3/etc/profile.d/conda.sh"
+else
+  echo "No Miniforge/Miniconda installation found in the home directory." >&2
+  exit 2
+fi
+conda activate cardiogb
+
+mkdir -p logs results/completion_supervisor
+cp configs/train_unisa_hpc.yaml configs/train.yaml
+
+export PYTHONPATH="$PBS_O_WORKDIR/src"
+export PYTHONUNBUFFERED=1
+export OMP_NUM_THREADS=28
+export MKL_NUM_THREADS=28
+export PYTORCH_ALLOC_CONF=backend:cudaMallocAsync
+export PYTORCH_CUDA_ALLOC_CONF=backend:cudaMallocAsync
+
+echo "Started $(date -Is) on $(hostname) as job ${PBS_JOBID:-unknown}"
+nvidia-smi
+python -u scripts/run_unisa_hpc_pipeline.py
+echo "Finished $(date -Is)"

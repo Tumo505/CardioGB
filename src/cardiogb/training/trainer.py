@@ -14,7 +14,7 @@ from torch import Tensor, nn
 
 from cardiogb.losses.objective import LossWeights, cardiogb_objective
 from cardiogb.models.message_passing import TorchGraph
-from cardiogb.ode.integration import integrate_model_with_residual_energy
+from cardiogb.ode.integration import integrate_model, integrate_model_with_residual_energy
 from cardiogb.training.callbacks import EarlyStopping
 
 
@@ -29,6 +29,7 @@ class CrossSectionalTransition:
     evaluation_group: str | None = None
 
 
+    intermediate_times: tuple[float, ...] = ()
 @dataclass(frozen=True)
 class TrainerConfig:
     epochs: int = 200
@@ -55,6 +56,9 @@ class TrainerConfig:
     warm_start_epochs: int = 0
 
 
+    multi_horizon_curriculum_epochs: int = 0
+    stability_velocity_target: float = 0.4
+    regret_margin: float = 0.0
 class CrossSectionalTrainer:
     """Train on distributions; no target spot is paired to a source spot."""
 
@@ -97,6 +101,7 @@ class CrossSectionalTrainer:
             "cuda", enabled=self.amp_enabled and self.amp_dtype == torch.float16
         )
         self.history: list[dict[str, float]] = []
+        self.current_epoch = 0
 
     @staticmethod
     def _transition_nbytes(transition: CrossSectionalTransition) -> int:
@@ -108,13 +113,14 @@ class CrossSectionalTrainer:
     def _move_transition(self, transition: CrossSectionalTransition) -> CrossSectionalTransition:
         graph = transition.graph.to(self.device) if hasattr(transition.graph, "to") else transition.graph
         return CrossSectionalTransition(
-            transition.source_states.to(self.device),
-            transition.target_states.to(self.device),
-            graph,
-            transition.t0,
-            transition.t1,
-            transition.name,
-            transition.evaluation_group,
+            source_states=transition.source_states.to(self.device),
+            target_states=transition.target_states.to(self.device),
+            graph=graph,
+            t0=transition.t0,
+            t1=transition.t1,
+            name=transition.name,
+            evaluation_group=transition.evaluation_group,
+            intermediate_times=transition.intermediate_times,
         )
 
     def _subsample(self, values: Tensor) -> Tensor:
@@ -159,8 +165,61 @@ class CrossSectionalTrainer:
                 ),
             )
             residual = None
+            stability_penalty = prediction.new_zeros(())
+            semigroup_penalty = prediction.new_zeros(())
             if hasattr(self.model, "vector_field"):
-                residual = self.model.vector_field(batch.t1, prediction, batch.graph).get("residual")
+                duration = abs(batch.t1 - batch.t0)
+                start_components = self.model.vector_field(
+                    batch.t0,
+                    source_states,
+                    batch.graph,
+                    forecast_horizon=duration,
+                )
+                end_components = self.model.vector_field(
+                    batch.t1,
+                    prediction,
+                    batch.graph,
+                    forecast_horizon=duration,
+                )
+                residual = end_components.get("residual")
+                target = self.config.stability_velocity_target
+                velocity = (
+                    torch.relu(start_components["total"].abs() - target).square().mean()
+                    + torch.relu(end_components["total"].abs() - target).square().mean()
+                )
+                acceleration = (
+                    (end_components["total"] - start_components["total"])
+                    / max(duration, torch.finfo(prediction.dtype).eps)
+                ).square().mean()
+                stability_penalty = velocity + 0.1 * acceleration
+            if (
+                batch.intermediate_times
+                and self.loss_weights.semigroup > 0
+                and hasattr(self.model, "vector_field")
+            ):
+                midpoint = min(
+                    batch.intermediate_times,
+                    key=lambda value: abs(value - 0.5 * (batch.t0 + batch.t1)),
+                )
+                composed = integrate_model(
+                    self.model, source_states, batch.graph, batch.t0, midpoint,
+                    step_size=step_size, method=self.config.solver,
+                    checkpoint_steps=(
+                        self.config.gradient_checkpoint_interval
+                        if self.config.gradient_checkpointing and self.model.training
+                        else False
+                    ),
+                )
+                composed = integrate_model(
+                    self.model, composed, batch.graph, midpoint, batch.t1,
+                    step_size=step_size, method=self.config.solver,
+                    checkpoint_steps=(
+                        self.config.gradient_checkpoint_interval
+                        if self.config.gradient_checkpointing and self.model.training
+                        else False
+                    ),
+                )
+                semigroup_penalty = (prediction - composed).square().mean()
         return cardiogb_objective(
             prediction,
             batch.target_states,
@@ -169,6 +228,10 @@ class CrossSectionalTrainer:
             residual_energy=trajectory_residual_energy,
             distribution_predicted=self._subsample(prediction),
             distribution_observed=self._subsample(batch.target_states),
+            persistence_reference=self._subsample(source_states),
+            stability_penalty=stability_penalty,
+            semigroup_penalty=semigroup_penalty,
+            regret_margin=self.config.regret_margin,
             weights=self.loss_weights,
         )
 
@@ -176,6 +239,19 @@ class CrossSectionalTrainer:
         self, transitions: Iterable[CrossSectionalTransition], training: bool
     ) -> list[CrossSectionalTransition]:
         items = list(transitions)
+        curriculum = self.config.multi_horizon_curriculum_epochs
+        if training and curriculum > 0 and items:
+            durations = [abs(item.t1 - item.t0) for item in items]
+            shortest, longest = min(durations), max(durations)
+            fraction = min(1.0, (self.current_epoch + 1) / curriculum)
+            cutoff = shortest + fraction * (longest - shortest)
+            eligible = [
+                item for item in items
+                if abs(item.t1 - item.t0) <= cutoff + 1e-12
+            ]
+            items = eligible or [
+                item for item in items if abs(item.t1 - item.t0) == shortest
+            ]
         limit = self.config.patches_per_transition_per_epoch
         if limit is None:
             return items
@@ -225,6 +301,7 @@ class CrossSectionalTrainer:
             t1=first.t1,
             name=f"{first.evaluation_group or first.name}__batch_{len(patches)}",
             evaluation_group=first.evaluation_group,
+            intermediate_times=first.intermediate_times,
         )
 
     def _batch_transition_patches(
@@ -277,6 +354,8 @@ class CrossSectionalTrainer:
         validation: Iterable[CrossSectionalTransition],
         *,
         checkpoint_path: str | Path | None = None,
+        start_epoch: int = 0,
+        initial_best: float = float("inf"),
     ) -> list[dict[str, float]]:
         train, validation = list(train), list(validation)
         transition_cache_bytes = sum(self._transition_nbytes(item) for item in [*train, *validation])
@@ -292,7 +371,7 @@ class CrossSectionalTrainer:
             and hasattr(self.model, "residual_model")
             and hasattr(self.model, "residual_enabled")
         )
-        if supports_warm_start and self.config.warm_start_epochs > 0:
+        if start_epoch == 0 and supports_warm_start and self.config.warm_start_epochs > 0:
             self.model.residual_enabled = False
             for parameter in self.model.residual_model.parameters():
                 parameter.requires_grad_(False)
@@ -300,6 +379,7 @@ class CrossSectionalTrainer:
             if hasattr(self.model, "raw_mechanistic_gate"):
                 self.model.raw_mechanistic_gate.requires_grad_(False)
             for epoch in range(self.config.warm_start_epochs):
+                self.current_epoch = 0
                 train_loss = self._epoch(train, True)
                 validation_loss = self._epoch(validation, False)
                 self.history.append(
@@ -315,11 +395,14 @@ class CrossSectionalTrainer:
                 parameter.requires_grad_(True)
             self.model.raw_residual_scale.requires_grad_(True)
             if hasattr(self.model, "raw_mechanistic_gate"):
-                self.model.raw_mechanistic_gate.requires_grad_(True)
+                self.model.raw_mechanistic_gate.requires_grad_(
+                    bool(getattr(self.model, "learn_mechanistic_gate", True))
+                )
 
-        stopper = EarlyStopping(self.config.early_stopping_patience)
+        stopper = EarlyStopping(self.config.early_stopping_patience, best=initial_best)
         best_state = deepcopy(self.model.state_dict())
-        for epoch in range(self.config.epochs):
+        for epoch in range(start_epoch, self.config.epochs):
+            self.current_epoch = epoch
             train_loss = self._epoch(train, True)
             validation_loss = self._epoch(validation, False)
             self.history.append(
@@ -348,6 +431,13 @@ class CrossSectionalTrainer:
                 time.sleep(self.config.thermal_cooldown_seconds)
         self.model.load_state_dict(best_state)
         return self.history
+
+    def resume_from_checkpoint(self, path: str | Path) -> tuple[int, float]:
+        """Restore the best model/optimizer state and return the next epoch and best loss."""
+        payload = torch.load(Path(path), map_location=self.device, weights_only=False)
+        self.model.load_state_dict(payload["model"])
+        self.optimizer.load_state_dict(payload["optimizer"])
+        return int(payload["epoch"]) + 1, float(payload["validation_loss"])
 
     def save_checkpoint(self, path: str | Path, epoch: int, validation_loss: float) -> None:
         target = Path(path)

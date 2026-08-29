@@ -10,6 +10,20 @@ from torch import Tensor, nn
 from cardiogb.ode.solvers import integrate_fixed_step
 
 
+def _model_field(
+    model: nn.Module, t: Tensor | float, states: Tensor, graph: Any, horizon: float
+) -> Tensor:
+    if hasattr(model, "persistence_gate"):
+        return model(t, states, graph, forecast_horizon=horizon)
+    return model(t, states, graph)
+
+
+def _model_components(
+    model: nn.Module, t: Tensor | float, states: Tensor, graph: Any, horizon: float
+) -> dict[str, Tensor]:
+    return model.vector_field(t, states, graph, forecast_horizon=horizon)
+
+
 def integrate_model(
     model: nn.Module,
     states: Tensor,
@@ -19,15 +33,18 @@ def integrate_model(
     *,
     step_size: float,
     method: str = "rk4",
+    checkpoint_steps: bool | int = False,
 ) -> Tensor:
+    horizon = abs(t1 - t0)
     return integrate_fixed_step(
-        lambda t, x: model(t, x, graph),
+        lambda t, x: _model_field(model, t, x, graph, horizon),
         states,
         t0,
         t1,
         step_size=step_size,
         method=method,
         projector=getattr(model, "project_state", None),
+        checkpoint_steps=checkpoint_steps,
     )
 
 
@@ -56,11 +73,12 @@ def integrate_model_with_residual_energy(
         ), None
 
     state_width = states.shape[-1]
+    horizon = abs(t1 - t0)
     augmented = torch.cat((states, states.new_zeros((len(states), 1))), dim=-1)
 
     def field(t: Tensor, value: Tensor) -> Tensor:
         x = value[:, :state_width]
-        components = model.vector_field(t, x, graph)
+        components = _model_components(model, t, x, graph, horizon)
         residual = components.get("residual")
         node_energy = (
             residual.square().mean(dim=-1, keepdim=True)

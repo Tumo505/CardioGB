@@ -25,7 +25,7 @@ def test_local_sensitivity_profiles_cover_all_rates_and_states() -> None:
     rows = local_mechanistic_sensitivities(model, 3.0, states)
     parameters = set(model.mechanistic_model.raw_parameters)
     state_names = set(model.mechanistic_model.state_names)
-    assert len(rows) == len(parameters) * len(state_names) == 90
+    assert len(rows) == len(parameters) * len(state_names)
     assert {row["parameter"] for row in rows} == parameters
     assert {row["target_state"] for row in rows} == state_names
     assert np.isfinite([row["signed_local_sensitivity"] for row in rows]).all()

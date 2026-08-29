@@ -99,6 +99,7 @@ class StateDataset:
             if len(source_index) == 0 or len(target_index) == 0:
                 continue
             base_name = f"{start:g}_to_{end:g}"
+            intermediate_times = tuple(float(value) for value in times if start < value < end)
             chunks = self._source_chunks(source_index, max_nodes)
             for chunk_number, (section, chunk) in enumerate(chunks):
                 source_nodes = torch.as_tensor(chunk, dtype=torch.long)
@@ -114,6 +115,7 @@ class StateDataset:
                         t1=float(end),
                         name=patch_name,
                         evaluation_group=base_name if len(chunks) > 1 else None,
+                        intermediate_times=intermediate_times,
                     )
                 )
         return transitions

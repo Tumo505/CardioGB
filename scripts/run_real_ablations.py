@@ -91,6 +91,7 @@ def run_variant(
     model_config = load_yaml("configs/model.yaml")
     mechanistic_config = load_yaml("configs/mechanistic_model.yaml")
     train_config = load_yaml("configs/train.yaml")
+    multi_horizon = train_config.get("multi_horizon", {})
     metadata = pd.DataFrame({"group": dataset.groups, "stage": dataset.times.astype(str)})
     train_mask, validation_mask, test_mask, split = grouped_split(
         metadata, group_column="group", stage_column="stage", seed=seed
@@ -98,7 +99,7 @@ def run_variant(
     split.save(output / "tables" / "split.json")
     k = int(model_config["graph"]["k"])
     max_nodes = int(train_config["batching"]["max_nodes"])
-    train = dataset.transitions(mask=train_mask, k=k, max_nodes=max_nodes)
+    train = dataset.transitions(mask=train_mask, k=k, max_nodes=max_nodes, adjacent_only=False)
     validation = dataset.transitions(mask=validation_mask, k=k, max_nodes=max_nodes)
     test = dataset.transitions(mask=test_mask, k=k, max_nodes=max_nodes)
     if variant == "shuffled_graph":
@@ -133,6 +134,10 @@ def run_variant(
             0 if variant == "no_mechanism" else int(train_config.get("warm_start_epochs", 0))
         ),
         gradient_checkpointing=bool(train_config.get("gradient_checkpointing", True)),
+        gradient_checkpoint_interval=int(train_config.get("gradient_checkpoint_interval", 1)),
+        multi_horizon_curriculum_epochs=int(multi_horizon.get("curriculum_epochs", 0)),
+        stability_velocity_target=float(multi_horizon.get("stability_velocity_target", 0.4)),
+        regret_margin=float(multi_horizon.get("regret_margin", 0.0)),
     )
     weights = LossWeights(
         distribution=float(train_config["loss"]["lambda_distribution"]),
@@ -142,6 +147,9 @@ def run_variant(
         biology=0.0 if variant == "no_constraints" else float(train_config["loss"]["lambda_biology"]),
         residual=float(train_config["loss"]["lambda_residual"])
         * RESIDUAL_PENALTY_MULTIPLIERS.get(variant, 1.0),
+        persistence_regret=float(train_config["loss"].get("lambda_persistence_regret", 0.0)),
+        stability=float(train_config["loss"].get("lambda_stability", 0.0)),
+        semigroup=float(train_config["loss"].get("lambda_semigroup", 0.0)),
     )
     device = resolve_device(train_config.get("device", "auto")).selected
     if device == "cuda":
@@ -154,10 +162,15 @@ def run_variant(
         config=trainer_config,
         loss_weights=weights,
     )
+    checkpoint_path = output / "checkpoints" / f"{variant}.pt"
+    start_epoch, initial_best = (
+        trainer.resume_from_checkpoint(checkpoint_path)
+        if checkpoint_path.is_file()
+        else (0, float("inf"))
+    )
     history = trainer.fit(
-        train,
-        validation,
-        checkpoint_path=output / "checkpoints" / f"{variant}.pt",
+        train, validation, checkpoint_path=checkpoint_path,
+        start_epoch=start_epoch, initial_best=initial_best,
     )
     export_table(pd.DataFrame(history), output / "metrics" / "history.csv")
     rows = evaluate_transitions(

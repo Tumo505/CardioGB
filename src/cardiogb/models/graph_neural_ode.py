@@ -17,6 +17,7 @@ class GraphNeuralODEFunc(nn.Module):
         layers: int = 2,
         dropout: float = 0.0,
         time_dependent: bool = True,
+        edge_gating: bool = True,
     ) -> None:
         super().__init__()
         self.state_dim = state_dim
@@ -28,6 +29,7 @@ class GraphNeuralODEFunc(nn.Module):
             hidden_dim=hidden_dim,
             layers=layers,
             dropout=dropout,
+            edge_gating=edge_gating,
         )
         self.projection = nn.Linear(message_state_dim, state_dim)
 

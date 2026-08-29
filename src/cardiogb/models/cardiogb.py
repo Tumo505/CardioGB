@@ -7,6 +7,7 @@ from typing import Any
 import torch
 from torch import Tensor, nn
 
+from cardiogb.models.constraints import inverse_softplus
 from cardiogb.ode.solvers import integrate_fixed_step
 
 
@@ -22,6 +23,13 @@ class CardioGB(nn.Module):
         residual_scale_initial: float = 0.05,
         mechanistic_gate_min: float = 0.05,
         mechanistic_gate_initial: float = 0.5,
+        learn_mechanistic_gate: bool = False,
+        orthogonal_residual: bool = True,
+        orthogonal_projection_strength: float = 1.0,
+        velocity_limit: float | None = 0.5,
+        persistence_gate: bool = True,
+        persistence_gate_initial: float = 0.95,
+        persistence_horizon_slope_initial: float = 0.05,
     ) -> None:
         super().__init__()
         if state_min >= state_max:
@@ -46,6 +54,27 @@ class CardioGB(nn.Module):
         self.raw_mechanistic_gate = nn.Parameter(
             torch.logit(torch.tensor(gate_ratio, dtype=torch.float32)).repeat(state_dim)
         )
+        self.learn_mechanistic_gate = bool(learn_mechanistic_gate)
+        if not self.learn_mechanistic_gate:
+            self.raw_mechanistic_gate.requires_grad_(False)
+        if not 0 <= orthogonal_projection_strength <= 1:
+            raise ValueError("orthogonal_projection_strength must lie in [0, 1]")
+        if velocity_limit is not None and velocity_limit <= 0:
+            raise ValueError("velocity_limit must be positive")
+        if not 0 < persistence_gate_initial < 1:
+            raise ValueError("persistence_gate_initial must lie in (0, 1)")
+        if persistence_horizon_slope_initial <= 0:
+            raise ValueError("persistence_horizon_slope_initial must be positive")
+        self.orthogonal_residual = bool(orthogonal_residual)
+        self.orthogonal_projection_strength = float(orthogonal_projection_strength)
+        self.velocity_limit = None if velocity_limit is None else float(velocity_limit)
+        self.persistence_gate_enabled = bool(persistence_gate)
+        self.raw_persistence_gate_bias = nn.Parameter(
+            torch.logit(torch.tensor(persistence_gate_initial, dtype=torch.float32))
+        )
+        self.raw_persistence_horizon_slope = nn.Parameter(
+            torch.tensor(inverse_softplus(persistence_horizon_slope_initial), dtype=torch.float32)
+        )
         self.mechanistic_enabled = True
         self.residual_enabled = True
 
@@ -53,15 +82,45 @@ class CardioGB(nn.Module):
         return self.residual_scale_max * torch.sigmoid(self.raw_residual_scale)
 
     def mechanistic_gate(self) -> Tensor:
+        if not self.learn_mechanistic_gate:
+            return torch.ones_like(self.raw_mechanistic_gate)
         return self.mechanistic_gate_min + (1.0 - self.mechanistic_gate_min) * torch.sigmoid(
             self.raw_mechanistic_gate
         )
+
+    def persistence_gate(
+        self,
+        forecast_horizon: Tensor | float | None,
+        uncertainty: Tensor | float | None = None,
+    ) -> Tensor:
+        """Return learned confidence in departing from persistence."""
+        if not self.persistence_gate_enabled:
+            return torch.ones_like(self.raw_persistence_gate_bias)
+        horizon = torch.as_tensor(
+            0.0 if forecast_horizon is None else forecast_horizon,
+            dtype=self.raw_persistence_gate_bias.dtype,
+            device=self.raw_persistence_gate_bias.device,
+        ).abs()
+        slope = torch.nn.functional.softplus(self.raw_persistence_horizon_slope)
+        logit = self.raw_persistence_gate_bias - slope * torch.log1p(horizon)
+        if uncertainty is not None:
+            value = torch.as_tensor(uncertainty, dtype=logit.dtype, device=logit.device)
+            logit = logit - value.clamp_min(0.0)
+        return torch.sigmoid(logit)
 
     def project_state(self, states: Tensor) -> Tensor:
         """Project numerical solver steps into the registered biological range."""
         return states.clamp(min=self.state_min, max=self.state_max)
 
-    def vector_field(self, t: Tensor | float, states: Tensor, graph: Any = None) -> dict[str, Tensor]:
+    def vector_field(
+        self,
+        t: Tensor | float,
+        states: Tensor,
+        graph: Any = None,
+        *,
+        forecast_horizon: Tensor | float | None = None,
+        uncertainty: Tensor | float | None = None,
+    ) -> dict[str, Tensor]:
         if self.mechanistic_enabled:
             mechanistic_raw = self.mechanistic_model(t, states)
             mechanistic = self.mechanistic_gate().to(dtype=states.dtype) * mechanistic_raw
@@ -74,14 +133,47 @@ class CardioGB(nn.Module):
             residual = torch.zeros_like(mechanistic)
         if mechanistic.shape != residual.shape:
             raise ValueError("mechanistic and residual vector fields must have identical shapes")
+        if self.orthogonal_residual and self.mechanistic_enabled and self.residual_enabled:
+            denominator = mechanistic.square().sum(dim=-1, keepdim=True).clamp_min(
+                torch.finfo(states.dtype).eps
+            )
+            parallel = (
+                (residual * mechanistic).sum(dim=-1, keepdim=True) / denominator
+            ) * mechanistic
+            residual = residual - self.orthogonal_projection_strength * parallel
+        confidence = self.persistence_gate(forecast_horizon, uncertainty).to(dtype=states.dtype)
+        mechanistic = confidence * mechanistic
+        residual = confidence * residual
+        total = mechanistic + residual
+        if self.velocity_limit is not None:
+            magnitude = total.abs().amax(dim=-1, keepdim=True)
+            ratio = magnitude / self.velocity_limit
+            scale = torch.where(
+                ratio > torch.finfo(total.dtype).eps,
+                torch.tanh(ratio) / ratio,
+                torch.ones_like(ratio),
+            )
+            mechanistic = mechanistic * scale
+            residual = residual * scale
+            total = mechanistic + residual
         return {
-            "total": mechanistic + residual,
+            "total": total,
             "mechanistic": mechanistic,
             "residual": residual,
         }
 
-    def forward(self, t: Tensor | float, states: Tensor, graph: Any = None) -> Tensor:
-        return self.vector_field(t, states, graph)["total"]
+    def forward(
+        self,
+        t: Tensor | float,
+        states: Tensor,
+        graph: Any = None,
+        *,
+        forecast_horizon: Tensor | float | None = None,
+        uncertainty: Tensor | float | None = None,
+    ) -> Tensor:
+        return self.vector_field(
+            t, states, graph, forecast_horizon=forecast_horizon, uncertainty=uncertainty
+        )["total"]
 
     def integrate(
         self,
@@ -93,8 +185,14 @@ class CardioGB(nn.Module):
         step_size: float = 0.05,
         method: str = "rk4",
     ) -> Tensor:
+        horizon = abs(t1 - t0)
         return integrate_fixed_step(
-            lambda t, x: self(t, x, graph),
+            lambda t, x: self(
+                t,
+                x,
+                graph,
+                forecast_horizon=horizon,
+            ),
             states,
             t0,
             t1,

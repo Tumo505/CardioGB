@@ -45,7 +45,8 @@ def test_e7_parameter_records_have_unique_complete_state_scales() -> None:
     )
     rows = parameter_records(model, member=0, seed=17, source="E4", case=2)
     names = [row["parameter"] for row in rows]
-    assert len(names) == len(set(names)) == 27
+    expected_count = len(model.mechanistic_model.raw_parameters) + 2 * len(model.mechanistic_model.state_names)
+    assert len(names) == len(set(names)) == expected_count
     assert {f"mechanistic_gate_{state}" for state in ("I", "A", "F", "C", "V", "M")} <= set(names)
     assert {f"residual_scale_{state}" for state in ("I", "A", "F", "C", "V", "M")} <= set(names)
     assert all(row["fit_id"] == "E4:case_2:seed_17" for row in rows)

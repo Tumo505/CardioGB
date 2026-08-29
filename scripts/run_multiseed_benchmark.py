@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import argparse
 import gc
-import time
 import json
+import os
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -69,6 +70,14 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=200)
     parser.add_argument("--seeds", type=int, nargs="+", default=list(range(20260815, 20260820)))
     parser.add_argument(
+        "--learned-models",
+        nargs="+",
+        choices=LEARNED_MODELS,
+        default=list(LEARNED_MODELS),
+    )
+    parser.add_argument("--manifest-name", default="run_manifest.json")
+    parser.add_argument("--skip-aggregate", action="store_true")
+    parser.add_argument(
         "--max-new-models",
         type=int,
         default=1,
@@ -81,13 +90,25 @@ def main() -> None:
     manifest = {
         "epochs_requested": args.epochs,
         "batch_max_nodes": int(train_config["batching"]["max_nodes"]),
-        "cuda_memory_fraction": float(train_config.get("cuda_memory_fraction", 0.65)),
+        "cuda_memory_fraction": float(
+            os.environ.get(
+                "CARDIOGB_CUDA_MEMORY_FRACTION",
+                train_config.get("cuda_memory_fraction", 0.65),
+            )
+        ),
+        "patch_batch_size": int(
+            os.environ.get(
+                "CARDIOGB_PATCH_BATCH_SIZE",
+                train_config["batching"]["patch_batch_size"],
+            )
+        ),
         "cooldown_seconds": cooldown,
         "seeds": args.seeds,
-        "models": ["persistence", *LEARNED_MODELS],
+        "models": ["persistence", *args.learned_models],
         "split": "grouped biological-unit, stratified by stage",
         "completed": [],
     }
+    manifest_path = args.output_dir / args.manifest_name
     newly_trained = 0
     for seed in args.seeds:
         seed_dir = args.output_dir / f"seed_{seed}"
@@ -95,8 +116,8 @@ def main() -> None:
         if not persistence.is_file():
             persistence_for_seed(dataset, seed, seed_dir)
         manifest["completed"].append({"seed": seed, "model": "persistence"})
-        atomic_json(manifest, args.output_dir / "run_manifest.json")
-        for model in LEARNED_MODELS:
+        atomic_json(manifest, manifest_path)
+        for model in args.learned_models:
             metrics = seed_dir / "metrics" / f"{model}_test.csv"
             if not metrics.is_file():
                 train_model(
@@ -105,11 +126,13 @@ def main() -> None:
                     seed_dir,
                     epochs_override=args.epochs,
                     seed_override=seed,
+                    resume=True,
                 )
                 newly_trained += 1
             manifest["completed"].append({"seed": seed, "model": model})
-            atomic_json(manifest, args.output_dir / "run_manifest.json")
-            aggregate(args.output_dir, args.seeds)
+            atomic_json(manifest, manifest_path)
+            if not args.skip_aggregate:
+                aggregate(args.output_dir, args.seeds)
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
@@ -118,12 +141,13 @@ def main() -> None:
             if args.max_new_models and newly_trained >= args.max_new_models:
                 manifest["status"] = "partial"
                 manifest["new_models_this_batch"] = newly_trained
-                atomic_json(manifest, args.output_dir / "run_manifest.json")
+                atomic_json(manifest, manifest_path)
                 print(json.dumps(manifest, indent=2))
                 return
     manifest["status"] = "complete"
-    atomic_json(manifest, args.output_dir / "run_manifest.json")
-    aggregate(args.output_dir, args.seeds)
+    atomic_json(manifest, manifest_path)
+    if not args.skip_aggregate:
+        aggregate(args.output_dir, args.seeds)
     print(json.dumps(manifest, indent=2))
 
 

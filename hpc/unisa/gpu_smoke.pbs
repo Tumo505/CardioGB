@@ -1,0 +1,38 @@
+#!/bin/bash
+#PBS -N cardiogb_smoke
+#PBS -q nvidia
+#PBS -l software=unisa
+#PBS -l select=1:ncpus=28:mem=500gb
+#PBS -l place=excl
+#PBS -l walltime=00:30:00
+#PBS -o logs/cardiogb_smoke.out
+#PBS -e logs/cardiogb_smoke.err
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+
+if [ -f "$HOME/miniforge3/etc/profile.d/conda.sh" ]; then
+  . "$HOME/miniforge3/etc/profile.d/conda.sh"
+elif [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
+  . "$HOME/miniconda3/etc/profile.d/conda.sh"
+else
+  echo "No Miniforge/Miniconda installation found in the home directory." >&2
+  exit 2
+fi
+conda activate cardiogb
+
+export PYTHONPATH="$PBS_O_WORKDIR/src"
+nvidia-smi
+python - <<'PY'
+import torch
+print("torch", torch.__version__)
+print("cuda available", torch.cuda.is_available())
+print("CUDA runtime", torch.version.cuda)
+if not torch.cuda.is_available():
+    raise SystemExit("PyTorch cannot see the allocated GPU")
+print("GPU", torch.cuda.get_device_name(0))
+x = torch.randn(4096, 4096, device="cuda", dtype=torch.float16)
+y = x @ x
+print("smoke checksum", float(y.float().mean()))
+print("allocated GiB", torch.cuda.memory_allocated() / 2**30)
+PY

@@ -184,6 +184,13 @@ def main() -> None:
     parser.add_argument("--split-seed", type=int, default=20260815)
     parser.add_argument("--confidence", type=float, default=0.95)
     parser.add_argument("--expected-members", type=int, default=5)
+    parser.add_argument(
+        "--additional",
+        nargs="*",
+        default=[],
+        metavar="NAME=NPZ",
+        help="Additional locked external StateDataset files to evaluate without retraining.",
+    )
     args = parser.parse_args()
 
     zebrafish = StateDataset.load(args.zebrafish)
@@ -238,8 +245,32 @@ def main() -> None:
     ]
     direct = grouped_predictions(models, [x for group in horizons for x in group], weights, ode, max_steps, aggregation_method)
 
+    additional_predictions = []
+    for specification in args.additional:
+        if "=" not in specification:
+            raise ValueError(f"additional dataset must be NAME=NPZ, received {specification!r}")
+        name, path = specification.split("=", 1)
+        external = StateDataset.load(path)
+        if external.state_names != zebrafish.state_names:
+            raise ValueError(f"{name} state definitions do not match the registered six-state model")
+        predictions = grouped_predictions(
+            models,
+            external.transitions(k=k, max_nodes=max_nodes),
+            weights,
+            ode,
+            max_steps,
+            aggregation_method,
+        )
+        additional_predictions.append((predictions, f"{name}_zero_shot_adjacent"))
+
     metric_rows, state_rows = [], []
-    for grouped, protocol in ((zebra_test, "zebrafish_internal_test"), (adjacent, "mouse_zero_shot_adjacent"), (direct, "mouse_zero_shot_direct_horizon")):
+    protocols = [
+        (zebra_test, "zebrafish_internal_test"),
+        (adjacent, "mouse_zero_shot_adjacent"),
+        (direct, "mouse_zero_shot_direct_horizon"),
+        *additional_predictions,
+    ]
+    for grouped, protocol in protocols:
         metrics, states = evaluate(grouped, weights, scale, additive_radius, zebrafish.state_names, protocol)
         metric_rows.extend(metrics)
         state_rows.extend(states)
@@ -277,6 +308,7 @@ def main() -> None:
             "absolute_calibration_scores": absolute_scores.tolist(),
             "mouse_retraining": False,
             "mouse_use": "exploratory direct cross-species transfer on matched six-state representation",
+            "additional_external_datasets": args.additional,
             "uncertainty_error_spearman": uncertainty_error,
             "uncertainty_horizon_spearman": uncertainty_horizon,
             "error_horizon_spearman": error_horizon,

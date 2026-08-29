@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from dataclasses import asdict
 from pathlib import Path
 
@@ -27,6 +28,7 @@ def train_model(
     *,
     epochs_override: int | None = None,
     seed_override: int | None = None,
+    resume: bool = False,
 ) -> dict[str, object]:
     model_config = load_yaml("configs/model.yaml")
     mech_config = load_yaml("configs/mechanistic_model.yaml")
@@ -44,12 +46,19 @@ def train_model(
     definition.save(output_dir / "tables" / "split.json")
     model = build_model(model_name, model_config, mech_config)
     device = resolve_device(train_config.get("device", "auto")).selected
+    cuda_memory_fraction = float(
+        os.environ.get(
+            "CARDIOGB_CUDA_MEMORY_FRACTION",
+            train_config.get("cuda_memory_fraction", 0.65),
+        )
+    )
     if device == "cuda":
         torch.cuda.set_per_process_memory_fraction(
-            float(train_config.get("cuda_memory_fraction", 0.65))
+            cuda_memory_fraction
         )
     ode = model_config["ode"]
     max_nodes = int(train_config["batching"]["max_nodes"])
+    multi_horizon = train_config.get("multi_horizon", {})
     trainer = CrossSectionalTrainer(
         model,
         device=device,
@@ -71,29 +80,65 @@ def train_model(
                 train_config["thermal_cooldown_every_epochs"]
             ),
             thermal_cooldown_seconds=float(train_config["thermal_cooldown_seconds"]),
-        patch_batch_size=int(train_config["batching"]["patch_batch_size"]),
-        force_float32_integration=bool(train_config["force_float32_integration"]),
-        mechanistic_learning_rate_scale=float(
-            train_config["mechanistic_learning_rate_scale"]
-        ),
-        warm_start_epochs=int(train_config.get("warm_start_epochs", 0)),
-        gradient_checkpointing=bool(train_config.get("gradient_checkpointing", True)),
+            patch_batch_size=int(
+                os.environ.get(
+                    "CARDIOGB_PATCH_BATCH_SIZE",
+                    train_config["batching"]["patch_batch_size"],
+                )
+            ),
+            force_float32_integration=bool(train_config["force_float32_integration"]),
+            mechanistic_learning_rate_scale=float(
+                train_config["mechanistic_learning_rate_scale"]
+            ),
+            warm_start_epochs=int(train_config.get("warm_start_epochs", 0)),
+            gradient_checkpointing=bool(train_config.get("gradient_checkpointing", True)),
+            gradient_checkpoint_interval=int(train_config.get("gradient_checkpoint_interval", 1)),
+            multi_horizon_curriculum_epochs=int(multi_horizon.get("curriculum_epochs", 0)),
+            stability_velocity_target=float(
+                multi_horizon.get("stability_velocity_target", 0.4)
+            ),
+            regret_margin=float(multi_horizon.get("regret_margin", 0.0)),
         ),
         loss_weights=LossWeights(
             distribution=float(train_config["loss"]["lambda_distribution"]),
-        moments=float(train_config["loss"]["lambda_moments"]),
-        wasserstein=float(train_config["loss"]["lambda_wasserstein"]),
+            moments=float(train_config["loss"]["lambda_moments"]),
+            wasserstein=float(train_config["loss"]["lambda_wasserstein"]),
             spatial=float(train_config["loss"]["lambda_spatial"]),
             biology=float(train_config["loss"]["lambda_biology"]),
             residual=float(train_config["loss"]["lambda_residual"]),
+            persistence_regret=float(
+                train_config["loss"].get("lambda_persistence_regret", 0.0)
+            ),
+            stability=float(train_config["loss"].get("lambda_stability", 0.0)),
+            semigroup=float(train_config["loss"].get("lambda_semigroup", 0.0)),
         ),
     )
     if device == "cuda":
         torch.cuda.reset_peak_memory_stats()
+    checkpoint_path = output_dir / "checkpoints" / f"{model_name}.pt"
+    start_epoch = 0
+    initial_best = float("inf")
+    if resume and checkpoint_path.is_file():
+        payload = torch.load(checkpoint_path, map_location=device, weights_only=False)
+        trainer.model.load_state_dict(payload["model"])
+        trainer.optimizer.load_state_dict(payload["optimizer"])
+        start_epoch = int(payload["epoch"]) + 1
+        initial_best = float(payload["validation_loss"])
     history = trainer.fit(
-        dataset.transitions(mask=train_mask, k=int(model_config["graph"]["k"]), max_nodes=max_nodes),
-        dataset.transitions(mask=validation_mask, k=int(model_config["graph"]["k"]), max_nodes=max_nodes),
-        checkpoint_path=output_dir / "checkpoints" / f"{model_name}.pt",
+        dataset.transitions(
+            mask=train_mask,
+            k=int(model_config["graph"]["k"]),
+            max_nodes=max_nodes,
+            adjacent_only=not bool(multi_horizon.get("enabled", False)),
+        ),
+        dataset.transitions(
+            mask=validation_mask,
+            k=int(model_config["graph"]["k"]),
+            max_nodes=max_nodes,
+        ),
+        checkpoint_path=checkpoint_path,
+        start_epoch=start_epoch,
+        initial_best=initial_best,
     )
     export_table(pd.DataFrame(history), output_dir / "metrics" / f"{model_name}_history.csv")
     evaluation = evaluate_transitions(
@@ -142,6 +187,8 @@ def train_model(
             int(torch.cuda.max_memory_allocated()) if device == "cuda" else 0
         ),
         "batch_max_nodes": max_nodes,
+        "patch_batch_size": trainer.config.patch_batch_size,
+        "cuda_memory_fraction": cuda_memory_fraction,
     }
 
 
@@ -152,6 +199,7 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=Path("results"))
     parser.add_argument("--epochs", type=int)
     parser.add_argument("--seed", type=int)
+    parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
     if args.model == "persistence":
         raise ValueError("Use train_baseline.py for the parameter-free persistence baseline")
@@ -161,6 +209,7 @@ def main() -> None:
         args.output_dir,
         epochs_override=args.epochs,
         seed_override=args.seed,
+        resume=args.resume,
     )))
 
 

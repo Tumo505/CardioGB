@@ -56,11 +56,23 @@ class EdgeMessagePassing(nn.Module):
         hidden_dim: int = 64,
         layers: int = 2,
         dropout: float = 0.0,
+        edge_gating: bool = True,
     ) -> None:
         super().__init__()
         self.state_dim = state_dim
         self.edge_dim = edge_dim
+        self.edge_gating = bool(edge_gating)
         self.message_network = _mlp(2 * state_dim + edge_dim, hidden_dim, hidden_dim, layers, dropout)
+        self.edge_gate_network = (
+            _mlp(2 * state_dim + edge_dim, hidden_dim, 1, max(1, layers - 1), dropout)
+            if self.edge_gating
+            else None
+        )
+        if self.edge_gate_network is not None:
+            final = next(module for module in reversed(self.edge_gate_network) if isinstance(module, nn.Linear))
+            with torch.no_grad():
+                final.weight.normal_(mean=0.0, std=1e-3)
+                final.bias.fill_(2.0)
         self.update_network = _mlp(state_dim + hidden_dim, hidden_dim, state_dim, layers, dropout)
 
     def forward(self, states: Tensor, graph: TorchGraph | Mapping[str, Tensor] | Any) -> Tensor:
@@ -70,9 +82,14 @@ class EdgeMessagePassing(nn.Module):
         edge_index = edge_index.to(device=states.device, dtype=torch.long)
         edge_attr = edge_attr.to(device=states.device, dtype=states.dtype)
         source, target = edge_index
-        messages = self.message_network(
-            torch.cat((states[target], states[source], edge_attr), dim=-1)
+        edge_features = torch.cat((states[target], states[source], edge_attr), dim=-1)
+        messages = self.message_network(edge_features)
+        gates = (
+            torch.sigmoid(self.edge_gate_network(edge_features))
+            if self.edge_gate_network is not None
+            else torch.ones((len(target), 1), dtype=states.dtype, device=states.device)
         )
+        messages = messages * gates
         # Scatter accumulation stays in the state dtype for numerical stability
         # and because index_add_ requires matching dtypes under CUDA autocast.
         messages = messages.to(dtype=states.dtype)
@@ -81,7 +98,7 @@ class EdgeMessagePassing(nn.Module):
         )
         aggregate.index_add_(0, target, messages)
         degree = torch.zeros(states.shape[0], 1, dtype=states.dtype, device=states.device)
-        degree.index_add_(0, target, torch.ones(len(target), 1, dtype=states.dtype, device=states.device))
+        degree.index_add_(0, target, gates.to(dtype=states.dtype))
         aggregate = aggregate / degree.clamp_min(1.0)
         return self.update_network(torch.cat((states, aggregate), dim=-1))
 
